@@ -1,0 +1,9 @@
+*.pyc
+*.ckpt
+*.pkl
+*.mat
+
+__pycache__/
+mnist/
+MNIST_cGAN_results/
+.idea/
