@@ -11,6 +11,8 @@ import pickle
 import time
 import random
 from torch.autograd.gradcheck import zero_gradients
+import matplotlib.pyplot as plt
+import scipy.stats
 
 device = torch.device("cuda")
 use_cuda = torch.cuda.is_available()
@@ -129,11 +131,15 @@ def gaussian(x, sigma=1.0, mu=0.0):
     return 1 / (sigma * np.sqrt(2 * np.pi)) * np.exp(- (x - mu) ** 2 / (2 * sigma ** 2))
 
 
+def log_gaussian(x, sigma=1.0, mu=0.0):
+    return np.log(gaussian(x, sigma, mu))
+
+
 def main(folding_id, opennessid, folds=5):
     batch_size = 64
     mnist_train = []
     mnist_valid = []
-
+    z_size = 32
 
     def shuffle_in_unison(a, b):
         assert len(a) == len(b)
@@ -163,6 +169,7 @@ def main(folding_id, opennessid, folds=5):
     mnist_test = [x for x in mnist_valid if x[0] in test_classes]
     mnist_valid = [x for x in mnist_valid if x[0] in test_classes]
 
+    random.seed(0)
     random.shuffle(mnist_train)
     random.shuffle(mnist_valid)
     random.shuffle(mnist_test)
@@ -178,31 +185,140 @@ def main(folding_id, opennessid, folds=5):
 
     mnist_test_x, mnist_test_y = shuffle_in_unison(mnist_test_x, mnist_test_y)
 
-    model = VAE(32).to(device)
+    model = VAE(z_size, False).to(device)
     model.cuda()
-    model.load_state_dict(torch.load("model_s.pkl"))
 
-    sample = torch.randn(64, 32).to(device)
+    pretrained_dict = torch.load("model_s.pkl")
+    model_dict = model.state_dict()
+
+    # 1. filter out unnecessary keys
+    pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+    # 2. overwrite entries in the existing state dict
+    model_dict.update(pretrained_dict)
+    # 3. load the new state dict
+    model.load_state_dict(pretrained_dict)
+
+    #model.load_state_dict(torch.load("model_s.pkl"))
+
+    sample = torch.randn(64, z_size).to(device)
     sample = model.decode(sample).cpu()
     save_image(sample.view(64, 1, 32, 32), 'sample.png')
 
     #model.eval()
     test_loss = 0
 
-    z_mean = np.zeros([32])
-    z_var = np.zeros([32])
-    count = 0
+    if False:
+        zlist = []
+        rlist = []
 
-    for it in range(len(mnist_train_x) // batch_size):
-        x = Variable(extract_batch(mnist_train_x, it, batch_size).view(-1, 32 * 32).data, requires_grad=True)
-        recon_batch, z, logvar = model(x.view(-1, 1, 32, 32))
-        z = z.cpu().detach().numpy()
-        z_mean += np.sum(z, 0)
-        z_var += np.sum(np.power(z, 2.0), 0)
-        count += 1
-    z_var -= np.power(z_mean / count, 2.0)
-    z_std = np.power(z_var / (count - 1), 0.5)
-    z_mean /= count
+        for it in range(len(mnist_train_x) // batch_size):
+            x = Variable(extract_batch(mnist_train_x, it, batch_size).view(-1, 32 * 32).data, requires_grad=True)
+            recon_batch, z, logvar = model(x.view(-1, 1, 32, 32))
+            J = compute_jacobian(x, z)
+            J = J.cpu().numpy()
+
+            recon_batch = recon_batch.squeeze().cpu().detach().numpy()
+            x = x.squeeze().cpu().detach().numpy()
+
+            for i in range(batch_size):
+                u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=True)
+
+                null = vh[z_size:]
+
+                reconstructed_in_null = null * recon_batch[i].flatten()
+                input_in_null = null * x[i].flatten()
+
+                distance = np.linalg.norm(input_in_null - reconstructed_in_null)
+                rlist.append(distance)
+
+            z = z.cpu().detach().numpy()
+            zlist.append(z)
+            #reconstruction_error = torch.norm(recon_batch.view(-1, 32 * 32) - x.view(-1, 32 * 32), 2.0, 1).cpu().detach().numpy()
+
+        data = {}
+        data['rlist'] = rlist
+        data['zlist'] = zlist
+
+        with open('data.pkl', 'wb') as pkl:
+            pickle.dump(data, pkl)
+
+    with open('data.pkl', 'rb') as pkl:
+        data = pickle.load(pkl)
+
+    rlist = data['rlist']
+    zlist = data['zlist']
+
+    # Choose how many bins you want here
+    num_bins = 50
+
+    # Use the histogram function to bin the data
+    counts, bin_edges = np.histogram(rlist, bins=num_bins, normed=True)
+    #
+    # # And finally plot the cdf
+    # plt.plot(bin_edges[1:], counts)
+    #
+    # plt.show()
+
+    # Now find the cdf
+    cdf = np.cumsum(counts[::-1])[::-1]
+    cdf /= cdf[0]
+
+    def r_cdf(x):
+        for l, r, i in zip(bin_edges[:-1], bin_edges[1:], range(len(cdf))):
+            if x > l and x < r:
+                lv = cdf[i]
+                rv = cdf[i+1]
+                v = lv + (rv - lv) * (x - l) / (r - l)
+                return v
+    #
+    # # And finally plot the cdf
+    # plt.plot(bin_edges[1:], cdf)
+    #
+    # plt.show()
+
+    z_mean = np.zeros([z_size])
+    z_var = np.zeros([z_size])
+
+    r_mean = 0
+    r_var = 0
+
+    for z in zlist:
+        z_mean += np.sum(z, 0) / z.shape[0]
+    z_mean /= len(zlist)
+
+    for z in zlist:
+        z_var += np.sum(np.power(z - z_mean, 2.0), 0) / z.shape[0]
+    z_var /= len(zlist)
+
+    z_std = np.power(z_var, 0.5)
+
+    for r in rlist:
+        r_mean += r
+    r_mean /= len(rlist)
+
+    for r in rlist:
+        r_var += np.power(r - r_mean, 2.0)
+    r_var /= len(rlist)
+
+    r_std = np.power(r_var, 0.5)
+
+    print("z_mean ", z_mean)
+    print("z_std ", z_std)
+    print("r_mean ", r_mean)
+    print("r_std ", r_std)
+
+    zlist = np.concatenate(zlist)
+    # for i in range(32):
+    #     plt.hist(zlist[:, i], bins='auto', histtype='step')
+    # plt.title("Histogram with 'auto' bins")
+    # plt.show()
+
+    gennorm_param = np.zeros([3, z_size])
+    for i in range(z_size):
+        betta, loc, scale = scipy.stats.gennorm.fit(zlist[:, i])
+        gennorm_param[0, i] = betta
+        gennorm_param[1, i] = loc
+        gennorm_param[2, i] = scale
 
     for it in range(len(mnist_test_x) // batch_size):
         x = Variable(extract_batch(mnist_test_x, it, batch_size).view(-1, 32 * 32).data, requires_grad=True)
@@ -217,17 +333,51 @@ def main(folding_id, opennessid, folds=5):
 
         z = z.cpu().detach().numpy()
 
+        reconstruction_error = torch.norm(recon_batch.view(-1, 32 * 32) - x.view(-1, 32 * 32), 2.0,
+                                          1).cpu().detach().numpy()
+
+        recon_batch_torch = recon_batch
+        recon_batch = recon_batch.squeeze().cpu().detach().numpy()
+        x_torch = x
+        x = x.squeeze().cpu().detach().numpy()
+
+        error = 0
+
         for i in range(batch_size):
             print(label[i].item() in train_classes)
-            u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
-            d = np.prod(s)
-            print(np.log(d))
-            #print(d)
-            #p = gaussian(z[i], z_std, z_mean)
-            #f = np.sum(np.log(p))
-            #print(f + d)
-        break
+            u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=True)
+            d = np.abs(np.prod(s))
+            logD = np.log(d)
+            #print(logD)
 
+            #p = gaussian(z[i], z_std, z_mean)
+            p = scipy.stats.gennorm.pdf(z[i], gennorm_param[0, :], gennorm_param[1, :], gennorm_param[2, :])
+            logPz = np.log(np.prod(p))
+
+            #r = reconstruction_error[i]
+            #rp = gaussian(r, r_std, r_mean)
+
+            null = vh[z_size:]
+
+            reconstructed_in_null = null * recon_batch[i].flatten()
+            input_in_null = null * x[i].flatten()
+
+            distance = np.linalg.norm(input_in_null - reconstructed_in_null)
+            #print(r_cdf(distance))
+            #print(np.log(r_cdf(distance)))
+            logPe = np.log(r_cdf(distance))
+
+            print("%f, %f %f %f" % (logD + logPz + logPe, logD, logPz, logPe))
+
+            # if not label[i].item() in train_classes and p > 40:
+            #     save_image(x_torch[i].view(1, 32, 32), 'falsePositive.png', nrow=1)
+            #     save_image(recon_batch_torch[i].view(1, 32, 32), 'falsePositiveR.png', nrow=1)
+
+            if (label[i].item() in train_classes) != (logD + logPz + logPe > -20):
+                error += 1
+
+        print(100 - 100 * error / batch_size)
+        break
 
 
 if __name__ == '__main__':
