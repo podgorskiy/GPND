@@ -264,6 +264,10 @@ def main(folding_id, opennessid, folds=5):
     cdf /= cdf[0]
 
     def r_cdf(x):
+        if x < bin_edges[0]:
+            return 1.0
+        if x > bin_edges[-1]:
+            return 0.0
         for l, r, i in zip(bin_edges[:-1], bin_edges[1:], range(len(cdf))):
             if x > l and x < r:
                 lv = cdf[i]
