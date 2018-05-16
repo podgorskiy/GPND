@@ -47,7 +47,7 @@ def extract_batch(data, it, batch_size):
 
 def main(folding_id, folds=5):
     batch_size = 128
-    zsize = 32
+    zsize = 16
     mnist_train = []
     mnist_valid = []
 
@@ -94,19 +94,21 @@ def main(folding_id, folds=5):
     ZD.cuda()
     ZD.weight_init(mean=0, std=0.02)
 
-    lr = 0.0002
+    lr = 0.002
 
     G_optimizer = optim.Adam(G.parameters(), lr=lr, betas=(0.5, 0.999))
     D_optimizer = optim.Adam(D.parameters(), lr=lr, betas=(0.5, 0.999))
     E_optimizer = optim.Adam(E.parameters(), lr=lr, betas=(0.5, 0.999))
     GE_optimizer = optim.Adam(list(E.parameters()) + list(G.parameters()), lr=lr, betas=(0.5, 0.999))
-    ZD_optimizer = optim.Adam(ZD.parameters(), lr=lr, betas=(0.5, 0.999))
+    ZD_optimizer = optim.Adam(ZD.parameters(), lr=5e-3, betas=(0.5, 0.999))
 
     train_epoch = 100
 
     BCE_loss = nn.BCELoss()
     y_real_ = torch.ones(batch_size)
     y_fake_ = torch.zeros(batch_size)
+    y_real_1 = torch.ones(1)
+    y_fake_1 = torch.zeros(1)
 
     sample = torch.randn(64, zsize).to(device).view(-1, zsize, 1, 1)
 
@@ -163,21 +165,20 @@ def main(folding_id, folds=5):
 
             #############################################
 
-            for i in range(2):
-                G.zero_grad()
+            G.zero_grad()
 
-                z = torch.randn((batch_size, zsize)).view(-1, zsize, 1, 1)
-                z = Variable(z)
+            z = torch.randn((batch_size, zsize)).view(-1, zsize, 1, 1)
+            z = Variable(z)
 
-                x_fake = G(z)
-                D_result = D(x_fake).squeeze()
+            x_fake = G(z)
+            D_result = D(x_fake).squeeze()
 
-                G_train_loss = BCE_loss(D_result, y_real_)
+            G_train_loss = BCE_loss(D_result, y_real_)
 
-                G_train_loss.backward()
-                G_optimizer.step()
+            G_train_loss.backward()
+            G_optimizer.step()
 
-                Gtrain_loss += G_train_loss.item()
+            Gtrain_loss += G_train_loss.item()
 
             #############################################
 
@@ -187,11 +188,11 @@ def main(folding_id, folds=5):
             z = Variable(z)
 
             ZD_result = ZD(z).squeeze()
-            ZD_real_loss = BCE_loss(ZD_result, y_real_)
+            ZD_real_loss = BCE_loss(ZD_result, y_real_1)
 
             z = E(x).squeeze()
             ZD_result = ZD(z).squeeze()
-            ZD_fake_loss = BCE_loss(ZD_result, y_fake_)
+            ZD_fake_loss = BCE_loss(ZD_result, y_fake_1)
 
             ZD_train_loss = ZD_real_loss + ZD_fake_loss
             ZD_train_loss.backward()
@@ -203,33 +204,22 @@ def main(folding_id, folds=5):
             #############################################
 
             E.zero_grad()
-
-            z = E(x).squeeze()
-
-            ZD_result = ZD(z).squeeze()
-            E_loss = BCE_loss(ZD_result, y_real_)
-
-            E_loss.backward()
-
-            E_optimizer.step()
-
-            Etrain_loss += E_loss.item()
-
-            #############################################
-
-            E.zero_grad()
             G.zero_grad()
 
             z = E(x)
             x_d = G(z)
 
-            Recon_loss = F.binary_cross_entropy(x_d, x, size_average=False) / 32 / 32 / 10
+            ZD_result = ZD(z.squeeze()).squeeze()
+            E_loss = BCE_loss(ZD_result, y_real_1) * 5.0
 
-            Recon_loss.backward()
+            Recon_loss = F.binary_cross_entropy(x_d, x)
+
+            (Recon_loss + E_loss).backward()
 
             GE_optimizer.step()
 
             GEtrain_loss += Recon_loss.item()
+            Etrain_loss += E_loss.item()
 
             if it == 0:
                 comparison = torch.cat([x[:64], x_d[:64]])

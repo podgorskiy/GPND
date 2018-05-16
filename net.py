@@ -48,6 +48,7 @@ class VAE(nn.Module):
         return h1, h2
 
     def reparameterize(self, mu, logvar):
+        return mu
         if self.training:
             std = torch.exp(0.5 * logvar)
             eps = torch.randn_like(std)
@@ -158,9 +159,9 @@ class ZDiscriminator(nn.Module):
     # initializers
     def __init__(self, z_size, d=128):
         super(ZDiscriminator, self).__init__()
-        self.linear1 = nn.Linear(z_size, d*2)
-        self.linear1_bn = nn.BatchNorm1d(d*2)
-        self.linear2 = nn.Linear(d*2, 1)
+        self.linear1 = nn.Linear(z_size, d)
+        self.linear2 = nn.Linear(d * 128, d)
+        self.linear3 = nn.Linear(d, 1)
 
     # weight_init
     def weight_init(self, mean, std):
@@ -168,9 +169,10 @@ class ZDiscriminator(nn.Module):
             normal_init(self._modules[m], mean, std)
 
     # forward method
-    def forward(self, input):
-        x = F.leaky_relu((self.linear1(input)), 0.2)
-        x = F.sigmoid(self.linear2(x))
+    def forward(self, x):
+        x = F.leaky_relu((self.linear1(x)), 0.2).view(1, -1)
+        x = F.leaky_relu((self.linear2(x)), 0.2)
+        x = F.sigmoid(self.linear3(x))
         return x
 
 

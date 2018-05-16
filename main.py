@@ -41,15 +41,16 @@ def numpy2torch(x):
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(recon_x, x, mu, logvar):
-    BCE = F.binary_cross_entropy(recon_x, x, size_average=False)
+    BCE = F.binary_cross_entropy(recon_x, x)
 
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
     # https://arxiv.org/abs/1312.6114
     # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-    KLD = -0.5 * torch.sum(torch.mean(1 + logvar - mu.pow(2) - logvar.exp(), 1))
+    KLD = -0.5 * torch.mean(torch.mean(1 + logvar - mu.pow(2) - logvar.exp(), 1))
+    #KLD += torch.mean((1 - logvar.exp()).pow(2))
 
-    return BCE + KLD * 200.0
+    return (BCE * 20.0 + KLD) * 100.0
 
 
 def extract_batch(data, it, batch_size):
@@ -109,7 +110,7 @@ def train(model, optimizer, train_data, valid_data, batch_size, epoch, train_epo
 
 def main(folding_id, folds=5):
     batch_size = 512
-    zsize = 32
+    zsize = 10
     mnist_train = []
     mnist_valid = []
 
