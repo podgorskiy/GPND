@@ -48,7 +48,7 @@ def extract_batch(data, it, batch_size):
 
 def main(folding_id, inliner_classes, total_classes, folds=5):
     batch_size = 128
-    zsize = 16
+    zsize = 24
     mnist_train = []
     mnist_valid = []
 
@@ -241,7 +241,10 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
         with torch.no_grad():
             resultsample = G(sample).cpu()
-            save_image(resultsample.view(64, 1, 32, 32), 'results/sample_' + str(epoch) + '.png')
+            directory = 'results'+str(inliner_classes[0])
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+            save_image(resultsample.view(64, 1, 32, 32), 'results'+str(inliner_classes[0])+'/sample_' + str(epoch) + '.png')
 
 
     print("Training finish!... save training results")

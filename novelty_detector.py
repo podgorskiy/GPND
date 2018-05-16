@@ -105,7 +105,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     batch_size = 64
     mnist_train = []
     mnist_valid = []
-    z_size = 16
+    z_size = 24
 
     def shuffle_in_unison(a, b):
         assert len(a) == len(b)
