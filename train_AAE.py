@@ -10,6 +10,7 @@ import json
 import pickle
 import time
 import random
+import os
 
 device = torch.device("cuda")
 use_cuda = torch.cuda.is_available()
@@ -45,15 +46,11 @@ def extract_batch(data, it, batch_size):
     return Variable(x)
 
 
-def main(folding_id, folds=5):
+def main(folding_id, inliner_classes, total_classes, folds=5):
     batch_size = 128
     zsize = 16
     mnist_train = []
     mnist_valid = []
-
-    class_data = json.load(open('class_table.txt'))
-
-    train_classes = class_data[0]["train"]
 
     for i in range(folds):
         if i != folding_id:
@@ -63,12 +60,15 @@ def main(folding_id, folds=5):
                 mnist_valid = fold
             mnist_train += fold
 
+    outlier_classes = []
+    for i in range(total_classes):
+        if i not in inliner_classes:
+            outlier_classes.append(i)
+
     #keep only train classes
-    mnist_train = [x for x in mnist_train if x[0] in train_classes]
-    mnist_valid = [x for x in mnist_valid if x[0] in train_classes]
+    mnist_train = [x for x in mnist_train if x[0] in inliner_classes]
 
     random.shuffle(mnist_train)
-    random.shuffle(mnist_valid)
 
     def list_of_pairs_to_numpy(l):
         return np.asarray([x[1] for x in l], np.float32), np.asarray([x[0] for x in l], np.int)
@@ -76,7 +76,6 @@ def main(folding_id, folds=5):
     print("Train set size:", len(mnist_train))
 
     mnist_train_x, mnist_train_y = list_of_pairs_to_numpy(mnist_train)
-    mnist_valid_x, mnist_valid_y = list_of_pairs_to_numpy(mnist_valid)
 
     G = Generator(zsize).to(device)
     G.cuda()
@@ -102,7 +101,7 @@ def main(folding_id, folds=5):
     GE_optimizer = optim.Adam(list(E.parameters()) + list(G.parameters()), lr=lr, betas=(0.5, 0.999))
     ZD_optimizer = optim.Adam(ZD.parameters(), lr=5e-3, betas=(0.5, 0.999))
 
-    train_epoch = 100
+    train_epoch = 60
 
     BCE_loss = nn.BCELoss()
     y_real_ = torch.ones(batch_size)
@@ -131,12 +130,12 @@ def main(folding_id, folds=5):
 
         shuffle(mnist_train_x)
 
-        if (epoch + 1) % 30 == 0:
-            G_optimizer.param_groups[0]['lr'] /= 2
-            D_optimizer.param_groups[0]['lr'] /= 2
-            GE_optimizer.param_groups[0]['lr'] /= 2
-            E_optimizer.param_groups[0]['lr'] /= 2
-            ZD_optimizer.param_groups[0]['lr'] /= 2
+        if (epoch + 1) % 20 == 0:
+            G_optimizer.param_groups[0]['lr'] /= 3
+            D_optimizer.param_groups[0]['lr'] /= 3
+            GE_optimizer.param_groups[0]['lr'] /= 3
+            E_optimizer.param_groups[0]['lr'] /= 3
+            ZD_optimizer.param_groups[0]['lr'] /= 3
             print("learning rate change!")
 
         for it in range(len(mnist_train_x) // batch_size):
@@ -222,9 +221,12 @@ def main(folding_id, folds=5):
             Etrain_loss += E_loss.item()
 
             if it == 0:
+                directory = 'results'+str(inliner_classes[0])
+                if not os.path.exists(directory):
+                    os.makedirs(directory)
                 comparison = torch.cat([x[:64], x_d[:64]])
                 save_image(comparison.cpu(),
-                           'results/reconstruction_' + str(epoch) + '.png', nrow=64)
+                           'results'+str(inliner_classes[0])+'/reconstruction_' + str(epoch) + '.png', nrow=64)
 
         Gtrain_loss /= (len(mnist_train_x))
         Dtrain_loss /= (len(mnist_train_x))
@@ -249,4 +251,4 @@ def main(folding_id, folds=5):
     torch.save(ZD.state_dict(), "ZDmodel.pkl")
 
 if __name__ == '__main__':
-    main(0)
+    main(0, [0], 9)

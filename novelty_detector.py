@@ -13,6 +13,14 @@ import random
 from torch.autograd.gradcheck import zero_gradients
 import matplotlib.pyplot as plt
 import scipy.stats
+import os
+from sklearn.metrics import roc_auc_score
+
+title_size = 16
+axis_title_size = 14
+ticks_size = 18
+
+power = 2.0
 
 device = torch.device("cuda")
 use_cuda = torch.cuda.is_available()
@@ -51,55 +59,6 @@ def extract_batch(data, it, batch_size):
 def extract_batch_(data, it, batch_size):
     x = data[it * batch_size:(it + 1) * batch_size]
     return x
-
-#
-# def train(model, optimizer, train_data, valid_data, batch_size, epoch, train_epoch):
-#     model.train()
-#     train_loss = 0
-#     epoch_start_time = time.time()
-#
-#     def shuffle(X):
-#         np.take(X, np.random.permutation(X.shape[0]), axis=0, out=X)
-#
-#     shuffle(train_data)
-#     #shuffle(valid_data)
-#
-#     for it in range(len(train_data) // batch_size):
-#         x = extract_batch(train_data, it, batch_size).view(-1, 1, 32, 32)
-#
-#         optimizer.zero_grad()
-#         recon_batch, mu, logvar = model(x)
-#         loss = loss_function(recon_batch, x, mu, logvar)
-#         loss.backward()
-#         train_loss += loss.item()
-#         optimizer.step()
-#
-#     train_loss /= len(train_data)
-#
-#     epoch_end_time = time.time()
-#     per_epoch_ptime = epoch_end_time - epoch_start_time
-#
-#     print('[%d/%d] - ptime: %.2f, loss: %.3f' % ((epoch + 1), train_epoch, per_epoch_ptime,
-#                                                  train_loss))
-#
-#
-#     model.eval()
-#     test_loss = 0
-#     with torch.no_grad():
-#         for it in range(len(valid_data) // batch_size):
-#             x = extract_batch(valid_data, it, batch_size).view(-1, 1, 32, 32)
-#             recon_batch, mu, logvar = model(x)
-#             test_loss += loss_function(recon_batch, x, mu, logvar).item()
-#             if it == 0:
-#                 x = x[:32]
-#                 recon_batch = recon_batch[:32]
-#                 n = x.size(0)
-#                 comparison = torch.cat([x, recon_batch])
-#                 save_image(comparison.cpu(),
-#                          'results/reconstruction_' + str(epoch) + '.png', nrow=n)
-#
-#     test_loss /= len(valid_data)
-#     print('====> Validation set loss: {:.4f}'.format(test_loss))
 
 
 def compute_jacobian(inputs, output):
@@ -142,7 +101,7 @@ def GetF1(true_positive, false_positive, false_negative):
     return 2.0 * precision * recall / (precision + recall)
 
 
-def main(folding_id, opennessid, folds=5):
+def main(folding_id, inliner_classes, total_classes, folds=5):
     batch_size = 64
     mnist_train = []
     mnist_valid = []
@@ -158,10 +117,10 @@ def main(folding_id, opennessid, folds=5):
             shuffled_b[new_index] = b[old_index]
         return shuffled_a, shuffled_b
 
-    class_data = json.load(open('class_table.txt'))
-
-    train_classes = class_data[0]["train"]
-    test_classes = class_data[opennessid]["test_target"]
+    outlier_classes = []
+    for i in range(total_classes):
+        if i not in inliner_classes:
+            outlier_classes.append(i)
 
     for i in range(folds):
         if i != folding_id:
@@ -171,15 +130,14 @@ def main(folding_id, opennessid, folds=5):
                 mnist_valid = fold
             mnist_train += fold
 
+    with open('data_fold_%d.pkl' % folding_id, 'rb') as pkl:
+        mnist_test = pickle.load(pkl)
+
     #keep only train classes
-    mnist_train = [x for x in mnist_train if x[0] in train_classes]
-    mnist_test = [x for x in mnist_valid if x[0] in test_classes]
-    mnist_valid = [x for x in mnist_valid if x[0] in test_classes]
+    mnist_train = [x for x in mnist_train if x[0] in inliner_classes]
 
     random.seed(0)
     random.shuffle(mnist_train)
-    random.shuffle(mnist_valid)
-    random.shuffle(mnist_test)
 
     def list_of_pairs_to_numpy(l):
         return np.asarray([x[1] for x in l], np.float32), np.asarray([x[0] for x in l], np.int)
@@ -187,13 +145,7 @@ def main(folding_id, opennessid, folds=5):
     print("Train set size:", len(mnist_train))
 
     mnist_train_x, mnist_train_y = list_of_pairs_to_numpy(mnist_train)
-    mnist_valid_x, mnist_valid_y = list_of_pairs_to_numpy(mnist_valid)
-    mnist_test_x, mnist_test_y = list_of_pairs_to_numpy(mnist_test)
 
-    mnist_test_x, mnist_test_y = shuffle_in_unison(mnist_test_x, mnist_test_y)
-
-    #model = VAE(z_size, False).to(device)
-    #model.cuda()
     G = Generator(z_size, False).to(device)
     G.cuda()
     E = Encoder(z_size, False).to(device)
@@ -213,15 +165,9 @@ def main(folding_id, opennessid, folds=5):
     E_dict = torch.load("Emodel.pkl")
     filter(E, E_dict)
 
-    #model.load_state_dict(torch.load("model_s.pkl"))
-
     sample = torch.randn(64, z_size).to(device)
     sample = G(sample.view(-1, z_size, 1, 1)).cpu()
     save_image(sample.view(64, 1, 32, 32), 'sample.png')
-
-    #G.eval()
-    #E.eval()
-    test_loss = 0
 
     if True:
         zlist = []
@@ -229,13 +175,9 @@ def main(folding_id, opennessid, folds=5):
 
         for it in range(len(mnist_train_x) // batch_size):
             x = Variable(extract_batch(mnist_train_x, it, batch_size).view(-1, 32 * 32).data, requires_grad=True)
-            #recon_batch, z, logvar = model(x.view(-1, 1, 32, 32))
             z = E(x.view(-1, 1, 32, 32))
             recon_batch = G(z)
             z = z.squeeze()
-
-            J = compute_jacobian(x, z)
-            J = J.cpu().numpy()
 
             recon_batch = recon_batch.squeeze().cpu().detach().numpy()
             x = x.squeeze().cpu().detach().numpy()
@@ -243,19 +185,10 @@ def main(folding_id, opennessid, folds=5):
             z = z.cpu().detach().numpy()
 
             for i in range(batch_size):
-                #u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
-
-                #null = vh[z_size:]
-
-                #reconstructed_in_null = null * recon_batch[i].flatten()
-                #input_in_null = null * x[i].flatten()
-
-                distance = np.sum(np.power(recon_batch[i].flatten() - x[i].flatten(), 4.0))
-                #distance = np.linalg.norm(z[i] - z_new[i])
+                distance = np.sum(np.power(recon_batch[i].flatten() - x[i].flatten(), power))
                 rlist.append(distance)
 
             zlist.append(z)
-            #reconstruction_error = torch.norm(recon_batch.view(-1, 32 * 32) - x.view(-1, 32 * 32), 2.0, 1).cpu().detach().numpy()
 
         data = {}
         data['rlist'] = rlist
@@ -270,16 +203,22 @@ def main(folding_id, opennessid, folds=5):
     rlist = data['rlist']
     zlist = data['zlist']
 
-    # Choose how many bins you want here
     num_bins = 50
-
-    # Use the histogram function to bin the data
     counts, bin_edges = np.histogram(rlist, bins=num_bins, normed=True)
 
-    # And finally plot the cdf
-    plt.plot(bin_edges[1:], counts)
-
-    plt.show()
+    plt.plot(bin_edges[1:], counts, linewidth=2)
+    plt.xlabel(r"Distance, $\left \|\| I - \hat{I} \right \|\|$", fontsize=axis_title_size)
+    plt.ylabel('Probability density', fontsize=axis_title_size)
+    plt.title(r"PDF of distance for reconstruction error, $p\left(\left \|\| I - \hat{I} \right \|\| \right)$", fontsize=title_size)
+    plt.grid(True)
+    plt.xticks(fontsize=ticks_size)
+    plt.yticks(fontsize=ticks_size)
+    plt.tight_layout(rect=(0.0, 0.0, 1, 0.95))
+    plt.savefig('mnist_d%d_randomsearch.pdf' % inliner_classes[0])
+    plt.savefig('mnist_d%d_randomsearch.eps' % inliner_classes[0])
+    plt.clf()
+    plt.cla()
+    plt.close()
 
     def r_pdf(x):
         if x < bin_edges[0]:
@@ -292,43 +231,22 @@ def main(folding_id, opennessid, folds=5):
             if l < x < r:
                 return max(counts[i], 1e-16)
 
-
-    z_mean = np.zeros([z_size])
-    z_var = np.zeros([z_size])
-
-    r_mean = 0
-    r_var = 0
-
-    for z in zlist:
-        z_mean += np.sum(z, 0) / z.shape[0]
-    z_mean /= len(zlist)
-
-    for z in zlist:
-        z_var += np.sum(np.power(z - z_mean, 2.0), 0) / z.shape[0]
-    z_var /= len(zlist)
-
-    z_std = np.power(z_var, 0.5)
-
-    for r in rlist:
-        r_mean += r
-    r_mean /= len(rlist)
-
-    for r in rlist:
-        r_var += np.power(r - r_mean, 2.0)
-    r_var /= len(rlist)
-
-    r_std = np.power(r_var, 0.5)
-
-    print("z_mean ", z_mean)
-    print("z_std ", z_std)
-    print("r_mean ", r_mean)
-    print("r_std ", r_std)
-
     zlist = np.concatenate(zlist)
     for i in range(z_size):
         plt.hist(zlist[:, i], bins='auto', histtype='step')
-    plt.title("Histogram with 'auto' bins")
-    plt.show()
+
+    plt.xlabel(r"$z$", fontsize=axis_title_size)
+    plt.ylabel('Probability density', fontsize=axis_title_size)
+    plt.title(r"PDF of embeding $p\left(z \right)$", fontsize=title_size)
+    plt.grid(True)
+    plt.xticks(fontsize=ticks_size)
+    plt.yticks(fontsize=ticks_size)
+    plt.tight_layout(rect=(0.0, 0.0, 1, 0.95))
+    plt.savefig('mnist_d%d_embeding.pdf' % inliner_classes[0])
+    plt.savefig('mnist_d%d_embeding.eps' % inliner_classes[0])
+    plt.clf()
+    plt.cla()
+    plt.close()
 
     gennorm_param = np.zeros([3, z_size])
     for i in range(z_size):
@@ -337,89 +255,194 @@ def main(folding_id, opennessid, folds=5):
         gennorm_param[1, i] = loc
         gennorm_param[2, i] = scale
 
-    true_positive = 0
-    false_positive = 0
-    false_negative = 0
-    error = 0
+    def compute_threshold(mnist_valid, percentage):
+        #############################################################################################
+        # Searching for threshold on validation set
+        random.shuffle(mnist_valid)
+        mnist_valid_outlier = [x for x in mnist_valid if x[0] in outlier_classes]
+        mnist_valid_inliner = [x for x in mnist_valid if x[0] in inliner_classes]
 
+        inliner_count = len(mnist_valid_inliner)
+        outlier_count = inliner_count * percentage // (100 - percentage)
 
-    for it in range(len(mnist_test_x) // batch_size):
-        x = Variable(extract_batch(mnist_test_x, it, batch_size).view(-1, 32 * 32).data, requires_grad=True)
-        label = extract_batch_(mnist_test_y, it, batch_size)
+        if len(mnist_valid_outlier) > outlier_count:
+            mnist_valid_outlier = mnist_valid_outlier[:outlier_count]
+        else:
+            outlier_count = len(mnist_valid_outlier)
+            inliner_count = outlier_count * (100 - percentage) // percentage
+            mnist_valid_inliner = mnist_valid_inliner[:inliner_count]
 
-        #recon_batch, z, logvar = model(x.view(-1, 1, 32, 32))
-        z = E(x.view(-1, 1, 32, 32))
-        recon_batch = G(z)
-        z = z.squeeze()
+        mnist_valid = mnist_valid_outlier + mnist_valid_inliner
+        random.shuffle(mnist_valid)
 
-        save_image(recon_batch.view(-1, 1, 32, 32), 'sample.png', nrow=1)
-        J = compute_jacobian(x, z)
+        mnist_valid_x, mnist_valid_y = list_of_pairs_to_numpy(mnist_valid)
 
-        J = J.cpu().numpy()
+        result = []
 
-        z = z.cpu().detach().numpy()
+        for it in range(len(mnist_valid_x) // batch_size):
+            x = Variable(extract_batch(mnist_valid_x, it, batch_size).view(-1, 32 * 32).data, requires_grad=True)
+            label = extract_batch_(mnist_valid_y, it, batch_size)
 
-        reconstruction_error = torch.norm(recon_batch.view(-1, 32 * 32) - x.view(-1, 32 * 32), 2.0,
-                                          1).cpu().detach().numpy()
+            z = E(x.view(-1, 1, 32, 32))
+            recon_batch = G(z)
+            z = z.squeeze()
 
-        recon_batch_torch = recon_batch
-        recon_batch = recon_batch.squeeze().cpu().detach().numpy()
-        x_torch = x
-        x = x.squeeze().cpu().detach().numpy()
+            J = compute_jacobian(x, z)
+            J = J.cpu().numpy()
+            z = z.cpu().detach().numpy()
 
-        smallestp = 100
-        largestp = -100
+            recon_batch = recon_batch.squeeze().cpu().detach().numpy()
+            x = x.squeeze().cpu().detach().numpy()
 
-        for i in range(batch_size):
-            print(label[i].item() in train_classes)
-            u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=True)
-            d = np.abs(np.prod(s))
-            logD = np.log(d)
-            #print(logD)
+            for i in range(batch_size):
+                u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
+                d = np.abs(np.prod(s))
+                logD = np.log(d)
 
-            #p = gaussian(z[i], z_std, z_mean)
-            p = scipy.stats.gennorm.pdf(z[i], gennorm_param[0, :], gennorm_param[1, :], gennorm_param[2, :])
-            logPz = np.log(np.prod(p))
+                p = scipy.stats.gennorm.pdf(z[i], gennorm_param[0, :], gennorm_param[1, :], gennorm_param[2, :])
+                logPz = np.log(np.prod(p))
 
-            #r = reconstruction_error[i]
-            #rp = gaussian(r, r_std, r_mean)
+                distance = np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power))
 
-            null = vh[z_size:]
+                logPe = np.log(r_pdf(distance))
 
-            reconstructed_in_null = null * recon_batch[i].flatten()
-            input_in_null = null * x[i].flatten()
+                P = logD + logPz + logPe
 
-            distance = np.sum(np.power(input_in_null - reconstructed_in_null, 4.0))
-            #distance = np.linalg.norm(z[i] - z_new[i])
+                result.append(((label[i].item() in inliner_classes), P))
 
-            #print(r_cdf(distance))
-            #print(np.log(r_cdf(distance)))
-            logPe = np.log(r_pdf(distance))
+        best_e = 0
+        best_f = 0
+        best_e_ = 0
+        best_f_ = 0
+        for e in range(-70, 30):
+            true_positive = 0
+            false_positive = 0
+            false_negative = 0
 
-            print("%f, %f %f %f" % (logD + logPz + logPe, logD, logPz, logPe))
-
-
-            if (label[i].item() in train_classes) != (logD + logPz + logPe > -32):
-                error += 1
-                if not label[i].item() in train_classes:
+            for r in result:
+                if r[1] > e and r[0]:
+                    true_positive += 1
+                if r[1] > e and not r[0]:
                     false_positive += 1
-                    if smallestp > logPe:
-                        smallestp = logPe
-                        save_image(x_torch[i].view(1, 32, 32), 'falsePositive.png', nrow=1)
-                        save_image(recon_batch_torch[i].view(1, 32, 32), 'falsePositiveR.png', nrow=1)
-                if label[i].item() in train_classes:
+                if r[1] < e and r[0]:
                     false_negative += 1
-                    if largestp < logPe:
-                        largestp = logPe
-                        save_image(x_torch[i].view(1, 32, 32), 'falseNegative.png', nrow=1)
-                        save_image(recon_batch_torch[i].view(1, 32, 32), 'falseNegativeR.png', nrow=1)
-            else:
-                true_positive += 1
+                if true_positive > 0:
+                    f = GetF1(true_positive, false_positive, false_negative)
+                    if f > best_f:
+                        best_f = f
+                        best_e = e
+                    if f >= best_f_:
+                        best_f_ = f
+                        best_e_ = e
+        best_e = (best_e + best_e_) / 2
 
-        break
+        print("Best e: ", best_e)
+        return best_e
 
-    print(100 - 100 * error / batch_size)
-    print(GetF1(true_positive, false_positive, false_negative))
+    def test(mnist_test, percentage, e):
+        true_positive = 0
+        false_positive = 0
+        false_negative = 0
+
+        random.shuffle(mnist_test)
+        mnist_test_outlier = [x for x in mnist_test if x[0] in outlier_classes]
+        mnist_test_inliner = [x for x in mnist_test if x[0] in inliner_classes]
+
+        inliner_count = len(mnist_test_inliner)
+        outlier_count = inliner_count * percentage // (100 - percentage)
+
+        if len(mnist_test_outlier) > outlier_count:
+            mnist_test_outlier = mnist_test_outlier[:outlier_count]
+        else:
+            outlier_count = len(mnist_test_outlier)
+            inliner_count = outlier_count * (100 - percentage) // percentage
+            mnist_test_inliner = mnist_test_inliner[:inliner_count]
+
+        mnist_test = mnist_test_outlier + mnist_test_inliner
+        random.shuffle(mnist_test)
+
+        mnist_test_x, mnist_test_y = list_of_pairs_to_numpy(mnist_test)
+
+        count = 0
+
+        result = []
+
+        for it in range(len(mnist_test_x) // batch_size):
+            x = Variable(extract_batch(mnist_test_x, it, batch_size).view(-1, 32 * 32).data, requires_grad=True)
+            label = extract_batch_(mnist_test_y, it, batch_size)
+
+            z = E(x.view(-1, 1, 32, 32))
+            recon_batch = G(z)
+            z = z.squeeze()
+
+            J = compute_jacobian(x, z)
+
+            J = J.cpu().numpy()
+
+            z = z.cpu().detach().numpy()
+
+            recon_batch = recon_batch.squeeze().cpu().detach().numpy()
+            x = x.squeeze().cpu().detach().numpy()
+
+            for i in range(batch_size):
+                u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
+                d = np.abs(np.prod(s))
+                logD = np.log(d)
+
+                p = scipy.stats.gennorm.pdf(z[i], gennorm_param[0, :], gennorm_param[1, :], gennorm_param[2, :])
+                logPz = np.log(np.prod(p))
+
+                distance = np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power))
+
+                logPe = np.log(r_pdf(distance))
+
+                #print("%f, %f %f %f" % (logD + logPz + logPe, logD, logPz, logPe))
+
+                count += 1
+
+                P = logD + logPz + logPe
+
+                if (label[i].item() in inliner_classes) != (logD + logPz + logPe > e):
+                    if not label[i].item() in inliner_classes:
+                        false_positive += 1
+                        # if smallestp > logPe:
+                        #     smallestp = logPe
+                        #     #save_image(x_torch[i].view(1, 32, 32), 'falsePositive.png', nrow=1)
+                        #     #save_image(recon_batch_torch[i].view(1, 32, 32), 'falsePositiveR.png', nrow=1)
+                    if label[i].item() in inliner_classes:
+                        false_negative += 1
+                        # if largestp < logPe:
+                        #     largestp = logPe
+                        #     #save_image(x_torch[i].view(1, 32, 32), 'falseNegative.png', nrow=1)
+                        #     #save_image(recon_batch_torch[i].view(1, 32, 32), 'falseNegativeR.png', nrow=1)
+                else:
+                    true_positive += 1
+
+                result.append(((label[i].item() in inliner_classes), P))
+
+        error = 100 * true_positive / count
+
+        y_true = [x[0] for x in result]
+        y_scores = [x[1] for x in result]
+        auc = roc_auc_score(y_true, y_scores)
+
+        with open('result_d%d_p%d.pkl' % (inliner_classes[0], percentage), 'wb') as output:
+            pickle.dump(result, output)
+
+        print("Percentage ", percentage)
+        print("Error ", error)
+        f1 = GetF1(true_positive, false_positive, false_negative)
+        print("F1 ", GetF1(true_positive, false_positive, false_negative))
+        print("AUC ", auc)
+
+        with open(os.path.join("results.txt"), "a") as file:
+            file.write("Percentage: %d\n Error: %f\n F1: %f\n AUC: %f\n" % (percentage, error, f1, auc))
+
+    percentages = [10, 20, 30, 40, 50]
+
+    for p in percentages:
+        e = compute_threshold(mnist_valid, p)
+        test(mnist_test, p, e)
 
 if __name__ == '__main__':
-    main(0, 4)
+    main(0, [1], 9)
