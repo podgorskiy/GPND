@@ -20,7 +20,7 @@ title_size = 16
 axis_title_size = 14
 ticks_size = 18
 
-power = 4.0
+power = 2.0
 
 device = torch.device("cuda")
 use_cuda = torch.cuda.is_available()
