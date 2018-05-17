@@ -424,7 +424,12 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
         y_true = [x[0] for x in result]
         y_scores = [x[1] for x in result]
-        auc = roc_auc_score(y_true, y_scores)
+        auc = 0
+
+        try:
+            auc = roc_auc_score(y_true, y_scores)
+        except:
+            auc = 0
 
         with open('result_d%d_p%d.pkl' % (inliner_classes[0], percentage), 'wb') as output:
             pickle.dump(result, output)
