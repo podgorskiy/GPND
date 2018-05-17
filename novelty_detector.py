@@ -11,6 +11,8 @@ import pickle
 import time
 import random
 from torch.autograd.gradcheck import zero_gradients
+import matplotlib
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import scipy.stats
 import os
