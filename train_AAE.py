@@ -99,9 +99,9 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     D_optimizer = optim.Adam(D.parameters(), lr=lr, betas=(0.5, 0.999))
     E_optimizer = optim.Adam(E.parameters(), lr=lr, betas=(0.5, 0.999))
     GE_optimizer = optim.Adam(list(E.parameters()) + list(G.parameters()), lr=lr, betas=(0.5, 0.999))
-    ZD_optimizer = optim.Adam(ZD.parameters(), lr=5e-3, betas=(0.5, 0.999))
+    ZD_optimizer = optim.Adam(ZD.parameters(), lr=3e-3, betas=(0.5, 0.999))
 
-    train_epoch = 40
+    train_epoch = 59
 
     BCE_loss = nn.BCELoss()
     y_real_ = torch.ones(batch_size)

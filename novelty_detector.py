@@ -272,10 +272,10 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
             inliner_count = outlier_count * (100 - percentage) // percentage
             mnist_valid_inliner = mnist_valid_inliner[:inliner_count]
 
-        mnist_valid = mnist_valid_outlier + mnist_valid_inliner
-        random.shuffle(mnist_valid)
+        _mnist_valid = mnist_valid_outlier + mnist_valid_inliner
+        random.shuffle(_mnist_valid)
 
-        mnist_valid_x, mnist_valid_y = list_of_pairs_to_numpy(mnist_valid)
+        mnist_valid_x, mnist_valid_y = list_of_pairs_to_numpy(_mnist_valid)
 
         result = []
 
@@ -326,14 +326,16 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
                     false_positive += 1
                 if r[1] < e and r[0]:
                     false_negative += 1
-                if true_positive > 0:
-                    f = GetF1(true_positive, false_positive, false_negative)
-                    if f > best_f:
-                        best_f = f
-                        best_e = e
-                    if f >= best_f_:
-                        best_f_ = f
-                        best_e_ = e
+
+            if true_positive > 0:
+                f = GetF1(true_positive, false_positive, false_negative)
+                if f > best_f:
+                    best_f = f
+                    best_e = e
+                if f >= best_f_:
+                    best_f_ = f
+                    best_e_ = e
+
         best_e = (best_e + best_e_) / 2
 
         print("Best e: ", best_e)
