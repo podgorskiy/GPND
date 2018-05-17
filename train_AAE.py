@@ -48,7 +48,7 @@ def extract_batch(data, it, batch_size):
 
 def main(folding_id, inliner_classes, total_classes, folds=5):
     batch_size = 128
-    zsize = 24
+    zsize = 32
     mnist_train = []
     mnist_valid = []
 
@@ -101,7 +101,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     GE_optimizer = optim.Adam(list(E.parameters()) + list(G.parameters()), lr=lr, betas=(0.5, 0.999))
     ZD_optimizer = optim.Adam(ZD.parameters(), lr=5e-3, betas=(0.5, 0.999))
 
-    train_epoch = 60
+    train_epoch = 40
 
     BCE_loss = nn.BCELoss()
     y_real_ = torch.ones(batch_size)
@@ -130,7 +130,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
         shuffle(mnist_train_x)
 
-        if (epoch + 1) % 20 == 0:
+        if (epoch + 1) % 30 == 0:
             G_optimizer.param_groups[0]['lr'] /= 3
             D_optimizer.param_groups[0]['lr'] /= 3
             GE_optimizer.param_groups[0]['lr'] /= 3
@@ -254,4 +254,4 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     torch.save(ZD.state_dict(), "ZDmodel.pkl")
 
 if __name__ == '__main__':
-    main(0, [0], 9)
+    main(0, [7], 9)

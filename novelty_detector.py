@@ -20,7 +20,7 @@ title_size = 16
 axis_title_size = 14
 ticks_size = 18
 
-power = 2.0
+power = 4.0
 
 device = torch.device("cuda")
 use_cuda = torch.cuda.is_available()
@@ -105,7 +105,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     batch_size = 64
     mnist_train = []
     mnist_valid = []
-    z_size = 24
+    z_size = 32
 
     def shuffle_in_unison(a, b):
         assert len(a) == len(b)
@@ -222,14 +222,14 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
     def r_pdf(x):
         if x < bin_edges[0]:
-            return max(counts[0], 1e-16)
+            return max(counts[0], 1e-32)
         if x >= bin_edges[-1]:
-            return max(counts[-1], 1e-16)
+            return max(counts[-1], 1e-32)
         for i in range(len(counts)):
             l = bin_edges[i]
             r = bin_edges[i + 1]
             if l < x < r:
-                return max(counts[i], 1e-16)
+                return max(counts[i], 1e-32)
 
     zlist = np.concatenate(zlist)
     for i in range(z_size):
@@ -314,7 +314,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
         best_f = 0
         best_e_ = 0
         best_f_ = 0
-        for e in range(-70, 30):
+        for e in range(-100, 30):
             true_positive = 0
             false_positive = 0
             false_negative = 0
@@ -436,7 +436,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
         print("AUC ", auc)
 
         with open(os.path.join("results.txt"), "a") as file:
-            file.write("Percentage: %d\n Error: %f\n F1: %f\n AUC: %f\n" % (percentage, error, f1, auc))
+            file.write("Class: %d\n Percentage: %d\n Error: %f\n F1: %f\n AUC: %f\n\n" % (inliner_classes[0], percentage, error, f1, auc))
 
     percentages = [10, 20, 30, 40, 50]
 
@@ -445,4 +445,4 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
         test(mnist_test, p, e)
 
 if __name__ == '__main__':
-    main(0, [1], 9)
+    main(0, [7], 9)
