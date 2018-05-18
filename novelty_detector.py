@@ -171,6 +171,22 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     sample = G(sample.view(-1, z_size, 1, 1)).cpu()
     save_image(sample.view(64, 1, 32, 32), 'sample.png')
 
+
+    # mnist_valid_outlier = [x for x in mnist_valid if x[0] in outlier_classes]
+    # _mnist_valid_x, _mnist_valid_y = list_of_pairs_to_numpy(mnist_valid_outlier)
+    # for it in range(len(_mnist_valid_x) // batch_size):
+    #     x = Variable(extract_batch(_mnist_valid_x, it, batch_size).view(-1, 32 * 32).data, requires_grad=True).view(-1, 1, 32, 32)
+    #     z = E(x)
+    #     recon_batch = G(z)
+    #     z = z.squeeze()
+    #
+    #     comparison = torch.cat([x[:64], recon_batch[:64]])
+    #     save_image(comparison.cpu(),
+    #                        'reconstruction_outlier.png', nrow=64)
+    #     #save_image(sample.view(64, 1, 32, 32), 'sample.png')
+    #     break
+    # exit()
+
     if True:
         zlist = []
         rlist = []
@@ -306,8 +322,10 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
                 distance = np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power))
 
-                logPe = np.log(r_pdf(distance))
+                logPe = np.log(r_pdf(distance) / np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power)))
+                #logPe = np.log(r_pdf(distance))
 
+                #P = logD + logPz + logPe
                 P = logD + logPz + logPe
 
                 result.append(((label[i].item() in inliner_classes), P))
@@ -398,15 +416,17 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
                 distance = np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power))
 
-                logPe = np.log(r_pdf(distance))
+                #logPe = np.log(r_pdf(distance))
+                logPe = np.log(r_pdf(distance) / np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power)))
 
                 #print("%f, %f %f %f" % (logD + logPz + logPe, logD, logPz, logPe))
 
                 count += 1
 
+                #P = logD + logPz + logPe
                 P = logD + logPz + logPe
 
-                if (label[i].item() in inliner_classes) != (logD + logPz + logPe > e):
+                if (label[i].item() in inliner_classes) != (P > e):
                     if not label[i].item() in inliner_classes:
                         false_positive += 1
                         # if smallestp > logPe:
