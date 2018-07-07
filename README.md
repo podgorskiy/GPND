@@ -63,25 +63,30 @@ After autoencoder was trained, from **novelty_detector.py**, you need to call *m
 *MNIST Generation.*
 
 <br><br>
-![COIL100 Reconstruction](images/reconstruction_59_one.png?raw=true "MNIST Reconstruction")
+![COIL100 Reconstruction](images/reconstruction_59_one.png?raw=true "COIL100 Reconstruction")
 
 *COIL100 Reconstruction, single category. First raw - real image, second - reconstructed. Only 57 images were used for training.*
 
 <br><br>
 
-![COIL100 Generation](images/sample_59_one.png?raw=true "MNIST Generation")
+![COIL100 Generation](images/sample_59_one.png?raw=true "COIL100 Generation")
 
 *COIL100 Generation. First raw - real image, second - reconstructed. Only 57 images were used for training.*
 
 <br><br>
 
-![COIL100 Reconstruction](images/reconstruction_59_seven.png?raw=true "MNIST Reconstruction")
+![COIL100 Reconstruction](images/reconstruction_59_seven.png?raw=true "COIL100 Reconstruction")
 
 *COIL100 Reconstruction, 7 categories. First raw - real image, second - reconstructed. Only about 60 images per category were used for training*
 
 <br><br>
 
-![COIL100 Generation](images/sample_59_seven.png?raw=true "MNIST Generation")
+![COIL100 Generation](images/sample_59_seven.png?raw=true "COIL100 Generation")
 
 *COIL100 Generation. First raw - real image, second - reconstructed. Only about 60 images per category were used for training.*
 
+<br><br>
+
+![PDF](images/PDF.png?raw=true "PDF")
+
+*PDF of the latent space for MNIST. Size of the latent space - 32*
