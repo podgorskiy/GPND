@@ -7,7 +7,7 @@ Lane Department of Computer Science and Electrical Engineering, West
     Morgantown, WV 26508\
     {stpidhorskyi, ralmohse, daadjeroh, gidoretto} @mix.wvu.edu
     
-The e-prepint of the article will be available soon on arxiv, [here is the pdf](http://github.com/podgorskiy/GPND/blob/master/document.pdf).
+The e-preprint of the article will be available soon on arxiv, [here is the pdf](http://github.com/podgorskiy/GPND/blob/master/document.pdf).
 
 *The code is going to be cleaned up soon.*
 *The code for other datasets will be added soon.*
