@@ -1,3 +1,18 @@
+# Copyright 2018 Stanislav Pidhorskyi
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#  http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 from __future__ import print_function
 import torch.utils.data
 from torch import optim
@@ -314,18 +329,15 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
             for i in range(batch_size):
                 u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
-                d = np.abs(np.prod(s))
-                logD = np.log(d)
+                logD = np.sum(np.log(np.abs(s)))
 
                 p = scipy.stats.gennorm.pdf(z[i], gennorm_param[0, :], gennorm_param[1, :], gennorm_param[2, :])
-                logPz = np.log(np.prod(p))
+                logPz = np.sum(np.log(p))
 
                 distance = np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power))
 
                 logPe = np.log(r_pdf(distance) / np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power)))
-                #logPe = np.log(r_pdf(distance))
 
-                #P = logD + logPz + logPe
                 P = logD + logPz + logPe
 
                 result.append(((label[i].item() in inliner_classes), P))
@@ -363,6 +375,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
     def test(mnist_test, percentage, e):
         true_positive = 0
+        true_negative = 0
         false_positive = 0
         false_negative = 0
 
@@ -408,11 +421,10 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
             for i in range(batch_size):
                 u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
-                d = np.abs(np.prod(s))
-                logD = np.log(d)
+                logD = np.sum(np.log(np.abs(s)))
 
                 p = scipy.stats.gennorm.pdf(z[i], gennorm_param[0, :], gennorm_param[1, :], gennorm_param[2, :])
-                logPz = np.log(np.prod(p))
+                logPz = np.sum(np.log(p))
 
                 distance = np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power))
 
@@ -440,11 +452,14 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
                         #     #save_image(x_torch[i].view(1, 32, 32), 'falseNegative.png', nrow=1)
                         #     #save_image(recon_batch_torch[i].view(1, 32, 32), 'falseNegativeR.png', nrow=1)
                 else:
-                    true_positive += 1
+                    if label[i].item() in inliner_classes:
+                        true_positive += 1
+                    else:
+                        true_negative += 1
 
                 result.append(((label[i].item() in inliner_classes), P))
 
-        error = 100 * true_positive / count
+        error = 100 * (true_positive + true_negative) / count
 
         y_true = [x[0] for x in result]
         y_scores = [x[1] for x in result]
