@@ -482,11 +482,18 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
         with open(os.path.join("results.txt"), "a") as file:
             file.write("Class: %d\n Percentage: %d\n Error: %f\n F1: %f\n AUC: %f\n\n" % (inliner_classes[0], percentage, error, f1, auc))
 
+        return auc, f1
+
     percentages = [10, 20, 30, 40, 50]
+
+    results = {}
 
     for p in percentages:
         e = compute_threshold(mnist_valid, p)
-        test(mnist_test, p, e)
+        auc, f1 = test(mnist_test, p, e)
+        results[p] = (auc, f1)
+
+    return results
 
 if __name__ == '__main__':
     main(0, [7], 9)

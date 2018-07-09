@@ -157,10 +157,10 @@ class Encoder(nn.Module):
 
 class ZDiscriminator(nn.Module):
     # initializers
-    def __init__(self, z_size, d=128):
+    def __init__(self, z_size, batchSize, d=128):
         super(ZDiscriminator, self).__init__()
         self.linear1 = nn.Linear(z_size, d)
-        self.linear2 = nn.Linear(d * 128, d)
+        self.linear2 = nn.Linear(d, d)
         self.linear3 = nn.Linear(d, 1)
 
     # weight_init
@@ -170,11 +170,31 @@ class ZDiscriminator(nn.Module):
 
     # forward method
     def forward(self, x):
-        x = F.leaky_relu((self.linear1(x)), 0.2).view(1, -1)
+        x = F.leaky_relu((self.linear1(x)), 0.2)
         x = F.leaky_relu((self.linear2(x)), 0.2)
         x = F.sigmoid(self.linear3(x))
         return x
 
+
+class ZDiscriminator_mergebatch(nn.Module):
+    # initializers
+    def __init__(self, z_size, batchSize, d=128):
+        super(ZDiscriminator_mergebatch, self).__init__()
+        self.linear1 = nn.Linear(z_size, d)
+        self.linear2 = nn.Linear(d * batchSize, d)
+        self.linear3 = nn.Linear(d, 1)
+
+    # weight_init
+    def weight_init(self, mean, std):
+        for m in self._modules:
+            normal_init(self._modules[m], mean, std)
+
+    # forward method
+    def forward(self, x):
+        x = F.leaky_relu((self.linear1(x)), 0.2).view(1, -1) # after the second layer all samples are concatenated
+        x = F.leaky_relu((self.linear2(x)), 0.2)
+        x = F.sigmoid(self.linear3(x))
+        return x
 
 def normal_init(m, mean, std):
     if isinstance(m, nn.ConvTranspose2d) or isinstance(m, nn.Conv2d):

@@ -26,7 +26,6 @@ import time
 import random
 import os
 
-device = torch.device("cuda")
 use_cuda = torch.cuda.is_available()
 
 FloatTensor = torch.FloatTensor
@@ -91,20 +90,20 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
     mnist_train_x, mnist_train_y = list_of_pairs_to_numpy(mnist_train)
 
-    G = Generator(zsize).to(device)
-    G.cuda()
+    G = Generator(zsize)
+    setup(G)
     G.weight_init(mean=0, std=0.02)
 
-    D = Discriminator().to(device)
-    D.cuda()
+    D = Discriminator()
+    setup(D)
     D.weight_init(mean=0, std=0.02)
 
-    E = Encoder(zsize).to(device)
-    E.cuda()
+    E = Encoder(zsize)
+    setup(E)
     E.weight_init(mean=0, std=0.02)
 
-    ZD = ZDiscriminator(zsize).to(device)
-    ZD.cuda()
+    ZD = ZDiscriminator(zsize)
+    setup(ZD)
     ZD.weight_init(mean=0, std=0.02)
 
     lr = 0.002
@@ -123,7 +122,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     y_real_1 = torch.ones(1)
     y_fake_1 = torch.zeros(1)
 
-    sample = torch.randn(64, zsize).to(device).view(-1, zsize, 1, 1)
+    sample = torch.randn(64, zsize).view(-1, zsize, 1, 1)
 
     for epoch in range(train_epoch):
         G.train()
