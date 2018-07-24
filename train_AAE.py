@@ -33,6 +33,9 @@ IntTensor = torch.IntTensor
 LongTensor = torch.LongTensor
 torch.set_default_tensor_type('torch.FloatTensor')
 
+# If zd_merge true, will use zd discriminator that looks at entire batch.
+zd_merge = False
+
 if use_cuda:
     device = torch.cuda.current_device()
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
@@ -102,7 +105,11 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     setup(E)
     E.weight_init(mean=0, std=0.02)
 
-    ZD = ZDiscriminator(zsize)
+    if zd_merge:
+        ZD = ZDiscriminator_mergebatch(zsize, batch_size).to(device)
+    else:
+        ZD = ZDiscriminator(zsize, batch_size).to(device)
+
     setup(ZD)
     ZD.weight_init(mean=0, std=0.02)
 
@@ -119,8 +126,9 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     BCE_loss = nn.BCELoss()
     y_real_ = torch.ones(batch_size)
     y_fake_ = torch.zeros(batch_size)
-    y_real_1 = torch.ones(1)
-    y_fake_1 = torch.zeros(1)
+    
+    y_real_z = torch.ones(1 if zd_merge else batch_size)
+    y_fake_z = torch.zeros(1 if zd_merge else batch_size)
 
     sample = torch.randn(64, zsize).view(-1, zsize, 1, 1)
 
@@ -200,11 +208,11 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
             z = Variable(z)
 
             ZD_result = ZD(z).squeeze()
-            ZD_real_loss = BCE_loss(ZD_result, y_real_1)
+            ZD_real_loss = BCE_loss(ZD_result, y_real_z)
 
             z = E(x).squeeze()
             ZD_result = ZD(z).squeeze()
-            ZD_fake_loss = BCE_loss(ZD_result, y_fake_1)
+            ZD_fake_loss = BCE_loss(ZD_result, y_fake_z)
 
             ZD_train_loss = ZD_real_loss + ZD_fake_loss
             ZD_train_loss.backward()
@@ -222,7 +230,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
             x_d = G(z)
 
             ZD_result = ZD(z.squeeze()).squeeze()
-            E_loss = BCE_loss(ZD_result, y_real_1) * 5.0
+            E_loss = BCE_loss(ZD_result, y_real_z) * 5.0
 
             Recon_loss = F.binary_cross_entropy(x_d, x)
 
