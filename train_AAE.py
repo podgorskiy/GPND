@@ -121,7 +121,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     GE_optimizer = optim.Adam(list(E.parameters()) + list(G.parameters()), lr=lr, betas=(0.5, 0.999))
     ZD_optimizer = optim.Adam(ZD.parameters(), lr=lr, betas=(0.5, 0.999))
 
-    train_epoch = 59
+    train_epoch = 80
 
     BCE_loss = nn.BCELoss()
     y_real_ = torch.ones(batch_size)
@@ -152,11 +152,11 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
         shuffle(mnist_train_x)
 
         if (epoch + 1) % 30 == 0:
-            G_optimizer.param_groups[0]['lr'] /= 3
-            D_optimizer.param_groups[0]['lr'] /= 3
-            GE_optimizer.param_groups[0]['lr'] /= 3
-            E_optimizer.param_groups[0]['lr'] /= 3
-            ZD_optimizer.param_groups[0]['lr'] /= 3
+            G_optimizer.param_groups[0]['lr'] /= 4
+            D_optimizer.param_groups[0]['lr'] /= 4
+            GE_optimizer.param_groups[0]['lr'] /= 4
+            E_optimizer.param_groups[0]['lr'] /= 4
+            ZD_optimizer.param_groups[0]['lr'] /= 4
             print("learning rate change!")
 
         for it in range(len(mnist_train_x) // batch_size):
@@ -231,7 +231,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
             x_d = G(z)
 
             ZD_result = ZD(z.squeeze()).squeeze()
-            E_loss = BCE_loss(ZD_result, y_real_z)
+            E_loss = BCE_loss(ZD_result, y_real_z) * 2.0
 
             Recon_loss = F.binary_cross_entropy(x_d, x)
 

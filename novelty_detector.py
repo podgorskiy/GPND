@@ -352,7 +352,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
         best_e_ = 0
         best_f_ = 0
 
-        for e in range(-1200, 0):
+        for e in range(-1500, 0):
             e /= 10.0
 
             y = np.greater(result, e)
