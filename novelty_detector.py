@@ -311,6 +311,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
         mnist_valid_x, mnist_valid_y = list_of_pairs_to_numpy(_mnist_valid)
 
         result = []
+        novel = []
 
         for it in range(len(mnist_valid_x) // batch_size):
             x = Variable(extract_batch(mnist_valid_x, it, batch_size).view(-1, 32 * 32).data, requires_grad=True)
@@ -340,24 +341,25 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
                 P = logD + logPz + logPe
 
-                result.append(((label[i].item() in inliner_classes), P))
+                result.append(P)
+                novel.append(label[i].item() in inliner_classes)
+
+        result = np.asarray(result, dtype=np.float32)
+        novel = np.asarray(novel, dtype=np.float32)
 
         best_e = 0
         best_f = 0
         best_e_ = 0
         best_f_ = 0
-        for e in range(-100, 30):
-            true_positive = 0
-            false_positive = 0
-            false_negative = 0
 
-            for r in result:
-                if r[1] > e and r[0]:
-                    true_positive += 1
-                if r[1] > e and not r[0]:
-                    false_positive += 1
-                if r[1] < e and r[0]:
-                    false_negative += 1
+        for e in range(-1200, 0):
+            e /= 10.0
+
+            y = np.greater(result, e)
+
+            true_positive = np.sum(np.logical_and(y, novel))
+            false_positive = np.sum(np.logical_and(y, np.logical_not(novel)))
+            false_negative = np.sum(np.logical_and(np.logical_not(y), novel))
 
             if true_positive > 0:
                 f = GetF1(true_positive, false_positive, false_negative)
@@ -368,7 +370,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
                     best_f_ = f
                     best_e_ = e
 
-        best_e = (best_e + best_e_) / 2
+        best_e = (best_e + best_e_) / 2.0
 
         print("Best e: ", best_e)
         return best_e
@@ -496,4 +498,4 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     return results
 
 if __name__ == '__main__':
-    main(0, [7], 9)
+    main(0, [0], 10)
