@@ -119,7 +119,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     D_optimizer = optim.Adam(D.parameters(), lr=lr, betas=(0.5, 0.999))
     E_optimizer = optim.Adam(E.parameters(), lr=lr, betas=(0.5, 0.999))
     GE_optimizer = optim.Adam(list(E.parameters()) + list(G.parameters()), lr=lr, betas=(0.5, 0.999))
-    ZD_optimizer = optim.Adam(ZD.parameters(), lr=3e-3, betas=(0.5, 0.999))
+    ZD_optimizer = optim.Adam(ZD.parameters(), lr=lr, betas=(0.5, 0.999))
 
     train_epoch = 59
 
@@ -164,7 +164,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
             #############################################
 
-            D_optimizer.zero_grad()
+            D.zero_grad()
 
             D_result = D(x).squeeze()
             D_real_loss = BCE_loss(D_result, y_real_)
@@ -172,7 +172,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
             z = torch.randn((batch_size, zsize)).view(-1, zsize, 1, 1)
             z = Variable(z)
 
-            x_fake = Variable(G(z).data)
+            x_fake = G(z).detach()
             D_result = D(x_fake).squeeze()
             D_fake_loss = BCE_loss(D_result, y_fake_)
 
@@ -210,7 +210,8 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
             ZD_result = ZD(z).squeeze()
             ZD_real_loss = BCE_loss(ZD_result, y_real_z)
 
-            z = E(x).squeeze()
+            z = E(x).squeeze().detach()
+
             ZD_result = ZD(z).squeeze()
             ZD_fake_loss = BCE_loss(ZD_result, y_fake_z)
 
@@ -230,7 +231,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
             x_d = G(z)
 
             ZD_result = ZD(z.squeeze()).squeeze()
-            E_loss = BCE_loss(ZD_result, y_real_z) * 5.0
+            E_loss = BCE_loss(ZD_result, y_real_z)
 
             Recon_loss = F.binary_cross_entropy(x_d, x)
 
@@ -275,4 +276,4 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     torch.save(ZD.state_dict(), "ZDmodel.pkl")
 
 if __name__ == '__main__':
-    main(0, [7], 9)
+    main(0, [0], 10)
