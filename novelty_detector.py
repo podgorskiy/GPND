@@ -104,14 +104,6 @@ def compute_jacobian(inputs, output):
     return torch.transpose(jacobian, dim0=0, dim1=1)
 
 
-def gaussian(x, sigma=1.0, mu=0.0):
-    return 1 / (sigma * np.sqrt(2 * np.pi)) * np.exp(- (x - mu) ** 2 / (2 * sigma ** 2))
-
-
-def log_gaussian(x, sigma=1.0, mu=0.0):
-    return np.log(gaussian(x, sigma, mu))
-
-
 def GetF1(true_positive, false_positive, false_negative):
     precision = true_positive / (true_positive + false_positive)
     recall = true_positive / (true_positive + false_negative)
@@ -310,15 +302,15 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
             for i in range(batch_size):
                 u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
-                logD = np.sum(np.log(np.abs(s)))
+                logD = np.sum(np.log(np.abs(s))) # | \mathrm{det} S^{-1} |
 
                 p = scipy.stats.gennorm.pdf(z[i], gennorm_param[0, :], gennorm_param[1, :], gennorm_param[2, :])
                 logPz = np.sum(np.log(p))
 
                 distance = np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power))
 
-                logPe = np.log(r_pdf(distance, bin_edges, counts))
-                logPe -= np.log(distance) * (32 * 32 - z_size)
+                logPe = np.log(r_pdf(distance, bin_edges, counts)) # p_{\|W^{\perp}\|} (\|w^{\perp}\|)
+                logPe -= np.log(distance) * (32 * 32 - z_size) # \| w^{\perp} \|}^{m-n}
 
                 P = logD + logPz + logPe
 
@@ -433,7 +425,6 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
         y_true = [x[0] for x in result]
         y_scores = [x[1] for x in result]
-        auc = 0
 
         try:
             auc = roc_auc_score(y_true, y_scores)

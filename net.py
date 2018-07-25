@@ -6,15 +6,6 @@ from torch.nn import functional as F
 class VAE(nn.Module):
     def __init__(self, zsize, batch_norm_track_statisticks=True):
         super(VAE, self).__init__()
-
-        # self.fc1 = nn.Linear(784, 400)
-        # self.fc21 = nn.Linear(400, 20)
-        # self.fc22 = nn.Linear(400, 20)
-        # self.fc3 = nn.Linear(20, 400)
-        # self.fc4 = nn.Linear(400, 784)
-
-        # def __init__(self, c, d=128):
-        # super(CGenerator, self).__init__()
         d = 128
         self.zsize = zsize
         self.deconv1 = nn.ConvTranspose2d(zsize, d * 2, 4, 1, 0)
@@ -35,20 +26,13 @@ class VAE(nn.Module):
 
     def encode(self, x):
         x = F.relu(self.conv1(x), 0.2)
-        #print(x.size())
         x = F.relu(self.conv2_bn(self.conv2(x)), 0.2)
         x = F.relu(self.conv3_bn(self.conv3(x)), 0.2)
-        #x = F.relu(self.conv2(x), 0.2)
-        #print(x.size())
-        #x = F.relu(self.conv3(x), 0.2)
-        #print(x.size())
         h1 = self.conv4_1(x)
-        #print(h1.size())
         h2 = self.conv4_2(x)
         return h1, h2
 
     def reparameterize(self, mu, logvar):
-        return mu
         if self.training:
             std = torch.exp(0.5 * logvar)
             eps = torch.randn_like(std)
