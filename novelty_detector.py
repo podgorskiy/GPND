@@ -186,22 +186,6 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     sample = G(sample.view(-1, z_size, 1, 1)).cpu()
     save_image(sample.view(64, 1, 32, 32), 'sample.png')
 
-
-    # mnist_valid_outlier = [x for x in mnist_valid if x[0] in outlier_classes]
-    # _mnist_valid_x, _mnist_valid_y = list_of_pairs_to_numpy(mnist_valid_outlier)
-    # for it in range(len(_mnist_valid_x) // batch_size):
-    #     x = Variable(extract_batch(_mnist_valid_x, it, batch_size).view(-1, 32 * 32).data, requires_grad=True).view(-1, 1, 32, 32)
-    #     z = E(x)
-    #     recon_batch = G(z)
-    #     z = z.squeeze()
-    #
-    #     comparison = torch.cat([x[:64], recon_batch[:64]])
-    #     save_image(comparison.cpu(),
-    #                        'reconstruction_outlier.png', nrow=64)
-    #     #save_image(sample.view(64, 1, 32, 32), 'sample.png')
-    #     break
-    # exit()
-
     if True:
         zlist = []
         rlist = []
@@ -236,8 +220,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     rlist = data['rlist']
     zlist = data['zlist']
 
-    num_bins = 50
-    counts, bin_edges = np.histogram(rlist, bins=num_bins, normed=True)
+    counts, bin_edges = np.histogram(rlist, bins=30, normed=True)
 
     plt.plot(bin_edges[1:], counts, linewidth=2)
     plt.xlabel(r"Distance, $\left \|\| I - \hat{I} \right \|\|$", fontsize=axis_title_size)
@@ -253,16 +236,13 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
     plt.cla()
     plt.close()
 
-    def r_pdf(x):
-        if x < bin_edges[0]:
-            return max(counts[0], 1e-32)
-        if x >= bin_edges[-1]:
-            return max(counts[-1], 1e-32)
-        for i in range(len(counts)):
-            l = bin_edges[i]
-            r = bin_edges[i + 1]
-            if l < x < r:
-                return max(counts[i], 1e-32)
+    def r_pdf(x, bins, count):
+        if x < bins[0]:
+            return max(count[0], 1e-308)
+        if x >= bins[-1]:
+            return max(count[-1], 1e-308)
+        id = np.digitize(x, bins) - 1
+        return max(count[id], 1e-308)
 
     zlist = np.concatenate(zlist)
     for i in range(z_size):
@@ -337,7 +317,8 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
                 distance = np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power))
 
-                logPe = np.log(r_pdf(distance) / np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power)))
+                logPe = np.log(r_pdf(distance, bin_edges, counts))
+                logPe -= np.log(distance) * (32 * 32 - z_size)
 
                 P = logD + logPz + logPe
 
@@ -352,9 +333,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
         best_e_ = 0
         best_f_ = 0
 
-        for e in range(-1500, 0):
-            e /= 10.0
-
+        for e in range(-4000, 0):
             y = np.greater(result, e)
 
             true_positive = np.sum(np.logical_and(y, novel))
@@ -430,29 +409,18 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
                 distance = np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power))
 
-                #logPe = np.log(r_pdf(distance))
-                logPe = np.log(r_pdf(distance) / np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power)))
-
-                #print("%f, %f %f %f" % (logD + logPz + logPe, logD, logPz, logPe))
+                logPe = np.log(r_pdf(distance, bin_edges, counts))
+                logPe -= np.log(distance) * (32 * 32 - z_size)
 
                 count += 1
 
-                #P = logD + logPz + logPe
                 P = logD + logPz + logPe
 
                 if (label[i].item() in inliner_classes) != (P > e):
                     if not label[i].item() in inliner_classes:
                         false_positive += 1
-                        # if smallestp > logPe:
-                        #     smallestp = logPe
-                        #     #save_image(x_torch[i].view(1, 32, 32), 'falsePositive.png', nrow=1)
-                        #     #save_image(recon_batch_torch[i].view(1, 32, 32), 'falsePositiveR.png', nrow=1)
                     if label[i].item() in inliner_classes:
                         false_negative += 1
-                        # if largestp < logPe:
-                        #     largestp = logPe
-                        #     #save_image(x_torch[i].view(1, 32, 32), 'falseNegative.png', nrow=1)
-                        #     #save_image(recon_batch_torch[i].view(1, 32, 32), 'falseNegativeR.png', nrow=1)
                 else:
                     if label[i].item() in inliner_classes:
                         true_positive += 1
