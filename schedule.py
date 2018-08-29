@@ -10,7 +10,7 @@ percentages = [10, 20, 30, 40, 50]
 def save_results(results):
     f = open("results.csv", 'wt')
     writer = csv.writer(f)
-    writer.writerow(('F1'))
+    writer.writerow(('F1',))
     writer.writerow(('Percentage 10', 'Percentage 20', 'Percentage 30', 'Percentage 40', 'Percentage 50'))
     maxlength = 0
     for percentage in percentages:
@@ -21,17 +21,63 @@ def save_results(results):
         row = []
         for percentage in percentages:
             list = results[percentage]
-            row.append(list[r][1] if len(list) > r else '')
+            res_f1 = [f1 for auc, f1, fpr95, error, auprin, auprout in list]
+            row.append(res_f1[r] if len(list) > r else '')
         writer.writerow(tuple(row))
 
-    writer.writerow(('AUC'))
+    writer.writerow(('AUC',))
     writer.writerow(('Percentage 10', 'Percentage 20', 'Percentage 30', 'Percentage 40', 'Percentage 50'))
 
     for r in range(maxlength):
         row = []
         for percentage in percentages:
             list = results[percentage]
-            row.append(list[r][0] if len(list) > r else '')
+            res_auc = [auc for auc, f1, fpr95, error, auprin, auprout in list]
+            row.append(res_auc[r] if len(list) > r else '')
+        writer.writerow(tuple(row))
+
+    writer.writerow(('FPR',))
+    writer.writerow(('Percentage 10', 'Percentage 20', 'Percentage 30', 'Percentage 40', 'Percentage 50'))
+
+    for r in range(maxlength):
+        row = []
+        for percentage in percentages:
+            list = results[percentage]
+            res_fpr95 = [fpr95 for auc, f1, fpr95, error, auprin, auprout in list]
+            row.append(res_fpr95[r] if len(list) > r else '')
+        writer.writerow(tuple(row))
+
+    writer.writerow(('error',))
+    writer.writerow(('Percentage 10', 'Percentage 20', 'Percentage 30', 'Percentage 40', 'Percentage 50'))
+
+    for r in range(maxlength):
+        row = []
+        for percentage in percentages:
+            list = results[percentage]
+            res_error = [error for auc, f1, fpr95, error, auprin, auprout in list]
+            row.append(res_error[r] if len(list) > r else '')
+        writer.writerow(tuple(row))
+
+    writer.writerow(('auprin',))
+    writer.writerow(('Percentage 10', 'Percentage 20', 'Percentage 30', 'Percentage 40', 'Percentage 50'))
+
+    for r in range(maxlength):
+        row = []
+        for percentage in percentages:
+            list = results[percentage]
+            res_auprin = [auprin for auc, f1, fpr95, error, auprin, auprout in list]
+            row.append(res_auprin[r] if len(list) > r else '')
+        writer.writerow(tuple(row))
+
+    writer.writerow(('auprout',))
+    writer.writerow(('Percentage 10', 'Percentage 20', 'Percentage 30', 'Percentage 40', 'Percentage 50'))
+
+    for r in range(maxlength):
+        row = []
+        for percentage in percentages:
+            list = results[percentage]
+            res_auprout = [auprout for auc, f1, fpr95, error, auprin, auprout in list]
+            row.append(res_auprout[r] if len(list) > r else '')
         writer.writerow(tuple(row))
     f.close()
 

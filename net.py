@@ -3,24 +3,25 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+
 class VAE(nn.Module):
-    def __init__(self, zsize, batch_norm_track_statisticks=True):
+    def __init__(self, zsize):
         super(VAE, self).__init__()
         d = 128
         self.zsize = zsize
         self.deconv1 = nn.ConvTranspose2d(zsize, d * 2, 4, 1, 0)
-        self.deconv1_bn = nn.BatchNorm2d(d * 2, track_running_stats=batch_norm_track_statisticks)
+        self.deconv1_bn = nn.BatchNorm2d(d * 2)
         self.deconv2 = nn.ConvTranspose2d(d * 2, d * 2, 4, 2, 1)
-        self.deconv2_bn = nn.BatchNorm2d(d * 2, track_running_stats=batch_norm_track_statisticks)
+        self.deconv2_bn = nn.BatchNorm2d(d * 2)
         self.deconv3 = nn.ConvTranspose2d(d * 2, d, 4, 2, 1)
-        self.deconv3_bn = nn.BatchNorm2d(d, track_running_stats=batch_norm_track_statisticks)
+        self.deconv3_bn = nn.BatchNorm2d(d)
         self.deconv4 = nn.ConvTranspose2d(d, 1, 4, 2, 1)
 
         self.conv1 = nn.Conv2d(1, d // 2, 4, 2, 1)
         self.conv2 = nn.Conv2d(d // 2, d * 2, 4, 2, 1)
-        self.conv2_bn = nn.BatchNorm2d(d * 2, track_running_stats=batch_norm_track_statisticks)
+        self.conv2_bn = nn.BatchNorm2d(d * 2)
         self.conv3 = nn.Conv2d(d * 2, d * 4, 4, 2, 1)
-        self.conv3_bn = nn.BatchNorm2d(d * 4, track_running_stats=batch_norm_track_statisticks)
+        self.conv3_bn = nn.BatchNorm2d(d * 4)
         self.conv4_1 = nn.Conv2d(d * 4, zsize, 4, 1, 0)
         self.conv4_2 = nn.Conv2d(d * 4, zsize, 4, 1, 0)
 
@@ -62,16 +63,16 @@ class VAE(nn.Module):
 
 class Generator(nn.Module):
     # initializers
-    def __init__(self, z_size, batch_norm_track_statisticks=True, d=128):
+    def __init__(self, z_size, d=128):
         super(Generator, self).__init__()
         self.deconv1_1 = nn.ConvTranspose2d(z_size, d*2, 4, 1, 0)
-        self.deconv1_1_bn = nn.BatchNorm2d(d*2, track_running_stats=batch_norm_track_statisticks)
+        self.deconv1_1_bn = nn.BatchNorm2d(d*2)
         self.deconv1_2 = nn.ConvTranspose2d(10, d*2, 4, 1, 0)
-        self.deconv1_2_bn = nn.BatchNorm2d(d*2, track_running_stats=batch_norm_track_statisticks)
+        self.deconv1_2_bn = nn.BatchNorm2d(d*2)
         self.deconv2 = nn.ConvTranspose2d(d*2, d*2, 4, 2, 1)
-        self.deconv2_bn = nn.BatchNorm2d(d*2, track_running_stats=batch_norm_track_statisticks)
+        self.deconv2_bn = nn.BatchNorm2d(d*2)
         self.deconv3 = nn.ConvTranspose2d(d*2, d, 4, 2, 1)
-        self.deconv3_bn = nn.BatchNorm2d(d, track_running_stats=batch_norm_track_statisticks)
+        self.deconv3_bn = nn.BatchNorm2d(d)
         self.deconv4 = nn.ConvTranspose2d(d, 1, 4, 2, 1)
 
     # weight_init
@@ -116,13 +117,13 @@ class Discriminator(nn.Module):
 
 class Encoder(nn.Module):
     # initializers
-    def __init__(self, z_size, batch_norm_track_statisticks=True, d=128):
+    def __init__(self, z_size, d=128):
         super(Encoder, self).__init__()
         self.conv1_1 = nn.Conv2d(1, d//2, 4, 2, 1)
         self.conv2 = nn.Conv2d(d // 2, d*2, 4, 2, 1)
-        self.conv2_bn = nn.BatchNorm2d(d*2, track_running_stats=batch_norm_track_statisticks)
+        self.conv2_bn = nn.BatchNorm2d(d*2)
         self.conv3 = nn.Conv2d(d*2, d*4, 4, 2, 1)
-        self.conv3_bn = nn.BatchNorm2d(d*4, track_running_stats=batch_norm_track_statisticks)
+        self.conv3_bn = nn.BatchNorm2d(d*4)
         self.conv4 = nn.Conv2d(d * 4, z_size, 4, 1, 0)
 
     # weight_init
@@ -179,6 +180,7 @@ class ZDiscriminator_mergebatch(nn.Module):
         x = F.leaky_relu((self.linear2(x)), 0.2)
         x = F.sigmoid(self.linear3(x))
         return x
+
 
 def normal_init(m, mean, std):
     if isinstance(m, nn.ConvTranspose2d) or isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):

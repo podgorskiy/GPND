@@ -74,7 +74,8 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
                 fold = pickle.load(pkl)
             if len(mnist_valid) == 0:
                 mnist_valid = fold
-            mnist_train += fold
+            else:
+                mnist_train += fold
 
     outlier_classes = []
     for i in range(total_classes):
@@ -231,6 +232,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
             x_d = G(z)
 
             ZD_result = ZD(z.squeeze()).squeeze()
+
             E_loss = BCE_loss(ZD_result, y_real_z) * 2.0
 
             Recon_loss = F.binary_cross_entropy(x_d, x)
@@ -264,8 +266,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
         with torch.no_grad():
             resultsample = G(sample).cpu()
             directory = 'results'+str(inliner_classes[0])
-            if not os.path.exists(directory):
-                os.makedirs(directory)
+            os.makedirs(directory, exist_ok = True)
             save_image(resultsample.view(64, 1, 32, 32), 'results'+str(inliner_classes[0])+'/sample_' + str(epoch) + '.png')
 
 
@@ -277,3 +278,4 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
 if __name__ == '__main__':
     main(0, [0], 10)
+

@@ -137,7 +137,8 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
                 fold = pickle.load(pkl)
             if len(mnist_valid) == 0:
                 mnist_valid = fold
-            mnist_train += fold
+            else:
+                mnist_train += fold
 
     with open('data_fold_%d.pkl' % folding_id, 'rb') as pkl:
         mnist_test = pickle.load(pkl)
@@ -155,24 +156,15 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
     mnist_train_x, mnist_train_y = list_of_pairs_to_numpy(mnist_train)
 
-    G = Generator(z_size, False).to(device)
-    G.cuda()
-    E = Encoder(z_size, False).to(device)
-    E.cuda()
+    G = Generator(z_size).to(device)
+    E = Encoder(z_size).to(device)
+    setup(E)
+    setup(G)
+    G.eval()
+    E.eval()
 
-    def filter(model, dict):
-        model_dict = model.state_dict()
-        # 1. filter out unnecessary keys
-        pretrained_dict = {k: v for k, v in dict.items() if k in model_dict}
-        # 2. overwrite entries in the existing state dict
-        model_dict.update(pretrained_dict)
-        # 3. load the new state dict
-        model.load_state_dict(pretrained_dict)
-
-    G_dict = torch.load("Gmodel.pkl")
-    filter(G, G_dict)
-    E_dict = torch.load("Emodel.pkl")
-    filter(E, E_dict)
+    G.load_state_dict(torch.load("Gmodel.pkl"))
+    E.load_state_dict(torch.load("Emodel.pkl"))
 
     sample = torch.randn(64, z_size).to(device)
     sample = G(sample.view(-1, z_size, 1, 1)).cpu()
@@ -307,6 +299,12 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
                 p = scipy.stats.gennorm.pdf(z[i], gennorm_param[0, :], gennorm_param[1, :], gennorm_param[2, :])
                 logPz = np.sum(np.log(p))
 
+                # Sometimes, due to rounding some element in p may be zero resulting in Inf in logPz
+                # In this case, just assign some large negative value to make sure that the sample 
+                # is classified as unknown. 
+                if not np.isfinite(logPz):
+                    logPz = -1000
+
                 distance = np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power))
 
                 logPe = np.log(r_pdf(distance, bin_edges, counts)) # p_{\|W^{\perp}\|} (\|w^{\perp}\|)
@@ -320,16 +318,21 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
         result = np.asarray(result, dtype=np.float32)
         novel = np.asarray(novel, dtype=np.float32)
 
+        minP = min(result) - 1
+        maxP = max(result) + 1
+
         best_e = 0
         best_f = 0
         best_e_ = 0
         best_f_ = 0
 
-        for e in range(-4000, 0):
+        not_novel = np.logical_not(novel)
+
+        for e in np.arange(minP, maxP, 0.1):
             y = np.greater(result, e)
 
             true_positive = np.sum(np.logical_and(y, novel))
-            false_positive = np.sum(np.logical_and(y, np.logical_not(novel)))
+            false_positive = np.sum(np.logical_and(y, not_novel))
             false_negative = np.sum(np.logical_and(np.logical_not(y), novel))
 
             if true_positive > 0:
@@ -399,6 +402,12 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
                 p = scipy.stats.gennorm.pdf(z[i], gennorm_param[0, :], gennorm_param[1, :], gennorm_param[2, :])
                 logPz = np.sum(np.log(p))
 
+                # Sometimes, due to rounding some element in p may be zero resulting in Inf in logPz
+                # In this case, just assign some large negative value to make sure that the sample 
+                # is classified as unknown. 
+                if not np.isfinite(logPz):
+                    logPz = -1000
+
                 distance = np.sum(np.power(x[i].flatten() - recon_batch[i].flatten(), power))
 
                 logPe = np.log(r_pdf(distance, bin_edges, counts))
@@ -440,10 +449,91 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
         print("F1 ", GetF1(true_positive, false_positive, false_negative))
         print("AUC ", auc)
 
-        with open(os.path.join("results.txt"), "a") as file:
-            file.write("Class: %d\n Percentage: %d\n Error: %f\n F1: %f\n AUC: %f\n\n" % (inliner_classes[0], percentage, error, f1, auc))
+        #inliers
+        X1 = [x[1] for x in result if x[0]]
 
-        return auc, f1
+        #outliers
+        Y1 = [x[1] for x in result if not x[0]]
+
+        minP = min([x[1] for x in result]) - 1
+        maxP = max([x[1] for x in result]) + 1
+
+        ##################################################################
+        # FPR at TPR 95
+        ##################################################################
+        fpr95 = 0.0
+        clothest_tpr = 1.0
+        dist_tpr = 1.0
+        for e in np.arange(minP, maxP, 0.2):
+            tpr = np.sum(np.greater_equal(X1, e)) / np.float(len(X1))
+            fpr = np.sum(np.greater_equal(Y1, e)) / np.float(len(Y1))
+            if abs(tpr - 0.95) < dist_tpr:
+                dist_tpr = abs(tpr - 0.95)
+                clothest_tpr = tpr
+                fpr95 = fpr
+
+        print("tpr: ", clothest_tpr)
+        print("fpr95: ", fpr95)
+
+        ##################################################################
+        # Detection error
+        ##################################################################
+        error = 1.0
+        for e in np.arange(minP, maxP, 0.2):
+            tpr = np.sum(np.less(X1, e)) / np.float(len(X1))
+            fpr = np.sum(np.greater_equal(Y1, e)) / np.float(len(Y1))
+            error = np.minimum(error, (tpr + fpr) / 2.0)
+
+        print("Detection error: ", error)
+
+        ##################################################################
+        # AUPR IN
+        ##################################################################
+        auprin = 0.0
+        recallTemp = 1.0
+        for e in np.arange(minP, maxP, 0.2):
+            tp = np.sum(np.greater_equal(X1, e))
+            fp = np.sum(np.greater_equal(Y1, e))
+            if tp + fp == 0:
+                continue
+            precision = tp / (tp + fp)
+            recall = tp / np.float(len(X1))
+            auprin += (recallTemp-recall)*precision
+            recallTemp = recall
+        auprin += recall * precision
+
+        print("auprin: ", auprin)
+
+
+        ##################################################################
+        # AUPR OUT
+        ##################################################################
+        minp, maxP = -maxP, -minP
+        X1 = [-x for x in X1]
+        Y1 = [-x for x in Y1]
+        auprout = 0.0
+        recallTemp = 1.0
+        for e in np.arange(minP, maxP, 0.2):
+            tp = np.sum(np.greater_equal(Y1, e))
+            fp = np.sum(np.greater_equal(X1, e))
+            if tp + fp == 0:
+                continue
+            precision = tp / (tp + fp)
+            recall = tp / np.float(len(Y1))
+            auprout += (recallTemp-recall)*precision
+            recallTemp = recall
+        auprout += recall * precision
+
+        print("auprout: ", auprout)
+
+        with open(os.path.join("results.txt"), "a") as file:
+            file.write(
+                "Class: %d\n Percentage: %d\n"
+                "Error: %f\n F1: %f\n AUC: %f\nfpr95: %f"
+                "\nDetection: %f\nauprin: %f\nauprout: %f\n\n" %
+                (inliner_classes[0], percentage, error, f1, auc, fpr95, error, auprin, auprout))
+
+        return auc, f1, fpr95, error, auprin, auprout
 
     percentages = [10, 20, 30, 40, 50]
 
@@ -451,8 +541,7 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
     for p in percentages:
         e = compute_threshold(mnist_valid, p)
-        auc, f1 = test(mnist_test, p, e)
-        results[p] = (auc, f1)
+        results[p] = test(mnist_test, p, e)
 
     return results
 
