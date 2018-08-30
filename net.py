@@ -63,7 +63,7 @@ class VAE(nn.Module):
 
 class Generator(nn.Module):
     # initializers
-    def __init__(self, z_size, d=128):
+    def __init__(self, z_size, d=128, channels=1):
         super(Generator, self).__init__()
         self.deconv1_1 = nn.ConvTranspose2d(z_size, d*2, 4, 1, 0)
         self.deconv1_1_bn = nn.BatchNorm2d(d*2)
@@ -73,7 +73,7 @@ class Generator(nn.Module):
         self.deconv2_bn = nn.BatchNorm2d(d*2)
         self.deconv3 = nn.ConvTranspose2d(d*2, d, 4, 2, 1)
         self.deconv3_bn = nn.BatchNorm2d(d)
-        self.deconv4 = nn.ConvTranspose2d(d, 1, 4, 2, 1)
+        self.deconv4 = nn.ConvTranspose2d(d, channels, 4, 2, 1)
 
     # weight_init
     def weight_init(self, mean, std):
@@ -86,15 +86,14 @@ class Generator(nn.Module):
         x = F.relu(self.deconv2_bn(self.deconv2(x)))
         x = F.relu(self.deconv3_bn(self.deconv3(x)))
         x = F.tanh(self.deconv4(x)) * 0.5 + 0.5
-
         return x
 
 
 class Discriminator(nn.Module):
     # initializers
-    def __init__(self, d=128):
+    def __init__(self, d=128, channels=1):
         super(Discriminator, self).__init__()
-        self.conv1_1 = nn.Conv2d(1, d//2, 4, 2, 1)
+        self.conv1_1 = nn.Conv2d(channels, d//2, 4, 2, 1)
         self.conv2 = nn.Conv2d(d // 2, d*2, 4, 2, 1)
         self.conv2_bn = nn.BatchNorm2d(d*2)
         self.conv3 = nn.Conv2d(d*2, d*4, 4, 2, 1)
@@ -117,9 +116,9 @@ class Discriminator(nn.Module):
 
 class Encoder(nn.Module):
     # initializers
-    def __init__(self, z_size, d=128):
+    def __init__(self, z_size, d=128, channels=1):
         super(Encoder, self).__init__()
-        self.conv1_1 = nn.Conv2d(1, d//2, 4, 2, 1)
+        self.conv1_1 = nn.Conv2d(channels, d//2, 4, 2, 1)
         self.conv2 = nn.Conv2d(d // 2, d*2, 4, 2, 1)
         self.conv2_bn = nn.BatchNorm2d(d*2)
         self.conv3 = nn.Conv2d(d*2, d*4, 4, 2, 1)
