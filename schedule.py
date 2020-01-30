@@ -102,7 +102,7 @@ mul = 0.25
 
 for fold in range(5 if full_run else 1):
     for i in range(10):
-        train_AAE.main(fold, [i], i, 10)
+        # train_AAE.main(fold, [i], i, 10)
         
         print("All")
         res = novelty_detector.main(fold, [i], i, 10, mul)
@@ -110,7 +110,7 @@ for fold in range(5 if full_run else 1):
         for k, v in res.items():
             results[k].append(v)
 
-        save_results(results, "results.csv")
+        save_results(results, "results_new.csv")
 
         # print("only_parallel")
         # res = novelty_detector_only_parallel.main(fold, [i], i, 10, mul)
