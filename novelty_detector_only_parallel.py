@@ -306,12 +306,12 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
                 if not np.isfinite(logPz):
                     logPz = -1000
 
-                distance = np.linalg.norm(x[i].flatten() - recon_batch[i].flatten())
+                #distance = np.linalg.norm(x[i].flatten() - recon_batch[i].flatten())
 
-                logPe = np.log(r_pdf(distance, bin_edges, counts)) # p_{\|W^{\perp}\|} (\|w^{\perp}\|)
-                logPe -= np.log(distance) * (32 * 32 - z_size) * mul # \| w^{\perp} \|}^{m-n}
+                #logPe = np.log(r_pdf(distance, bin_edges, counts)) # p_{\|W^{\perp}\|} (\|w^{\perp}\|)
+                #logPe -= np.log(distance) * (32 * 32 - z_size) * mul # \| w^{\perp} \|}^{m-n}
 
-                P = logD + logPz + logPe
+                P = logD + logPz# + logPe
 
                 result.append(P)
                 novel.append(label[i].item() in inliner_classes)
@@ -419,14 +419,14 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
                 if not np.isfinite(logPz):
                     logPz = -1000
 
-                distance = np.linalg.norm(x[i].flatten() - recon_batch[i].flatten())
+                #distance = np.linalg.norm(x[i].flatten() - recon_batch[i].flatten())
 
-                logPe = np.log(r_pdf(distance, bin_edges, counts))
-                logPe -= np.log(distance) * (32 * 32 - z_size) * mul
+                #logPe = np.log(r_pdf(distance, bin_edges, counts))
+                #logPe -= np.log(distance) * (32 * 32 - z_size) * mul
 
                 count += 1
 
-                P = logD + logPz + logPe
+                P = logD + logPz# + logPe
                 #print("Probability density estimation: ", timer() - start)
 
                 if (label[i].item() in inliner_classes) != (P > e):

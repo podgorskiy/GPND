@@ -20,7 +20,6 @@ from net import *
 import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
-import json
 import pickle
 import time
 import random
@@ -62,9 +61,9 @@ def extract_batch(data, it, batch_size):
     return Variable(x)
 
 
-def main(folding_id, inliner_classes, total_classes, folds=5):
+def main(folding_id, inliner_classes, ic, total_classes, folds=5):
     batch_size = 128
-    zsize = 32
+    zsize = 16
     mnist_train = []
     mnist_valid = []
 
@@ -271,10 +270,10 @@ def main(folding_id, inliner_classes, total_classes, folds=5):
 
 
     print("Training finish!... save training results")
-    torch.save(G.state_dict(), "Gmodel.pkl")
-    torch.save(E.state_dict(), "Emodel.pkl")
-    torch.save(D.state_dict(), "Dmodel.pkl")
-    torch.save(ZD.state_dict(), "ZDmodel.pkl")
+    torch.save(G.state_dict(), "Gmodel_%d_%d.pkl" %(folding_id, ic))
+    torch.save(E.state_dict(), "Emodel_%d_%d.pkl" %(folding_id, ic))
+    torch.save(D.state_dict(), "Dmodel_%d_%d.pkl" %(folding_id, ic))
+    torch.save(ZD.state_dict(), "ZDmodel_%d_%d.pkl" %(folding_id, ic))
 
 if __name__ == '__main__':
     main(0, [0], 10)

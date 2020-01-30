@@ -286,16 +286,16 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
             recon_batch = G(z)
             z = z.squeeze()
 
-            J = compute_jacobian(x, z)
-            J = J.cpu().numpy()
+            #J = compute_jacobian(x, z)
+            #J = J.cpu().numpy()
             z = z.cpu().detach().numpy()
 
             recon_batch = recon_batch.squeeze().cpu().detach().numpy()
             x = x.squeeze().cpu().detach().numpy()
 
             for i in range(batch_size):
-                u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
-                logD = np.sum(np.log(np.abs(s))) # | \mathrm{det} S^{-1} |
+                #u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
+                #logD = np.sum(np.log(np.abs(s))) # | \mathrm{det} S^{-1} |
 
                 p = scipy.stats.gennorm.pdf(z[i], gennorm_param[0, :], gennorm_param[1, :], gennorm_param[2, :])
                 logPz = np.sum(np.log(p))
@@ -311,7 +311,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
                 logPe = np.log(r_pdf(distance, bin_edges, counts)) # p_{\|W^{\perp}\|} (\|w^{\perp}\|)
                 logPe -= np.log(distance) * (32 * 32 - z_size) * mul # \| w^{\perp} \|}^{m-n}
 
-                P = logD + logPz + logPe
+                P = logPz + logPe
 
                 result.append(P)
                 novel.append(label[i].item() in inliner_classes)
@@ -393,9 +393,9 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
             #print("Inference: ", timer() - start)
             #start = timer()
-            J = compute_jacobian(x, z)
+            #J = compute_jacobian(x, z)
 
-            J = J.cpu().numpy()
+            #J = J.cpu().numpy()
 
             z = z.cpu().detach().numpy()
             #print("Compute Jacobian: ", timer() - start)
@@ -405,10 +405,10 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
             for i in range(batch_size):
                 #start = timer()
-                u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
+                #u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
                 #print("Compute SVD: ", timer() - start)
                 #start = timer()
-                logD = np.sum(np.log(np.abs(s)))
+                #logD = np.sum(np.log(np.abs(s)))
 
                 p = scipy.stats.gennorm.pdf(z[i], gennorm_param[0, :], gennorm_param[1, :], gennorm_param[2, :])
                 logPz = np.sum(np.log(p))
@@ -426,7 +426,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
                 count += 1
 
-                P = logD + logPz + logPe
+                P = logPz + logPe
                 #print("Probability density estimation: ", timer() - start)
 
                 if (label[i].item() in inliner_classes) != (P > e):

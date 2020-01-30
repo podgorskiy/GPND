@@ -67,8 +67,6 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         self.deconv1_1 = nn.ConvTranspose2d(z_size, d*2, 4, 1, 0)
         self.deconv1_1_bn = nn.BatchNorm2d(d*2)
-        self.deconv1_2 = nn.ConvTranspose2d(10, d*2, 4, 1, 0)
-        self.deconv1_2_bn = nn.BatchNorm2d(d*2)
         self.deconv2 = nn.ConvTranspose2d(d*2, d*2, 4, 2, 1)
         self.deconv2_bn = nn.BatchNorm2d(d*2)
         self.deconv3 = nn.ConvTranspose2d(d*2, d, 4, 2, 1)
@@ -118,8 +116,8 @@ class Encoder(nn.Module):
     # initializers
     def __init__(self, z_size, d=128, channels=1):
         super(Encoder, self).__init__()
-        self.conv1_1 = nn.Conv2d(channels, d//2, 4, 2, 1)
-        self.conv2 = nn.Conv2d(d // 2, d*2, 4, 2, 1)
+        self.conv1_1 = nn.Conv2d(channels, d, 4, 2, 1)
+        self.conv2 = nn.Conv2d(d, d*2, 4, 2, 1)
         self.conv2_bn = nn.BatchNorm2d(d*2)
         self.conv3 = nn.Conv2d(d*2, d*4, 4, 2, 1)
         self.conv3_bn = nn.BatchNorm2d(d*4)

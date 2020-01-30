@@ -1,4 +1,4 @@
-# Copyright 2017 Stanislav Pidhorskyi
+# Copyright 2018 Stanislav Pidhorskyi
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,133 +12,119 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Batch provider. Returns iterator to batches"""
 
-from random import shuffle
-import matplotlib.pyplot as plt
-from scipy import misc
-import random
-import numpy as np
-import pickle
 try:
-    import queue
+    from Queue import Queue, Empty
 except ImportError:
-    import Queue as queue
+    from queue import Queue, Empty
 from threading import Thread, Lock, Event
-import logging
-from PIL import Image
-try:
-    from BytesIO import BytesIO
-except ImportError:
-    from io import BytesIO
 
 
-class BatchProvider:
-    """All in memory batch provider for small datasets that fit RAM"""
-    def __init__(self, batch_size, items, cycled=True, worker=16, transformation=None):
-        self.items = items
-        shuffle(self.items)
-        self.batch_size = batch_size
+def batch_provider(data, batch_size, processor, worker_count=1, queue_size=16, report_progress=False):
+    class State:
+        def __init__(self):
+            self.current_batch = 0
+            self.lock = Lock()
+            self.batches_count = len(data) // batch_size + (1 if len(data) % batch_size != 0 else 0)
+            self.quit_event = Event()
+            self.queue = Queue(queue_size)
+            self.batches_done_count = 0
+            self.progress_bar = None
+            if report_progress:
+                self.progress_bar = ProgressBar(self.batches_count)
 
-        self.current_batch = 0
-        self.cycled = cycled
-        if self.cycled:
-            worker = 1
-        self.done = False
-        self.transformation = transformation
-        self.lock = Lock()
-        self.worker = worker
-        self.quit_event = Event()
-
-        self.q = queue.Queue(16)
-        self.batches_n = len(self.items)//self.batch_size
-        logging.debug("Batches per epoch: {0}", self.batches_n)
-
-    def get_batches(self):
-        workers = []
-        for i in range(self.worker):
-            worker = Thread(target=self._worker)
-            worker.setDaemon(True)
-            worker.start()
-            workers.append(worker)
-        try:
-            while True:
-                yield self._get_batch()
-
-        except GeneratorExit:
-            self.quit_event.set()
-            self.done = True
-            while not self.q.empty():
-                try:
-                    self.q.get(False)
-                except queue.Empty:
-                    continue
-                self.q.task_done()
-
-    def _worker(self):
-        while not (self.quit_event.is_set() and self.done):
-            b = self.__next()
-            if b is None:
-                break
-            self.q.put(b)
-
-    def _get_batch(self):
-        if self.q.empty() and self.done:
-            return None
-        item = self.q.get()
-        self.q.task_done()
-        return item
-
-    def __next(self):
-        self.lock.acquire()
-        if self.current_batch == self.batches_n:
-            self.done = True
-            if self.cycled:
-                self.done = False
-                self.current_batch = 0
-                shuffled = list(self.items)
-                shuffle(shuffled)
-                self.items = shuffled
-            else:
+        def get_next_batch_it(self):
+            try:
+                self.lock.acquire()
+                if self.quit_event.is_set() or self.current_batch == self.batches_count:
+                    raise StopIteration
+                cb = self.current_batch
+                self.current_batch += 1
+                return cb
+            finally:
                 self.lock.release()
-                return None
-        cb = self.current_batch
-        self.current_batch += 1
-        items = self.items
-        self.lock.release()
 
-        b_images = []
-        b_labels = []
+        def push_done_batch(self, batch):
+            try:
+                self.lock.acquire()
+                state.queue.put(batch)
+                self.batches_done_count += 1
+            finally:
+                self.lock.release()
 
-        for i in range(self.batch_size):
-            item = items[cb * self.batch_size + i]
+        def all_done(self):
+            return self.batches_done_count == self.batches_count and state.queue.empty()
 
-            if self.transformation != None:
-                image = self.transformation(item[1])
-            else:
-                image = item[1]
+    state = State()
 
-            b_images.append(image)
-            b_labels.append(item[0])
-        feed_dict = {"images": b_images, "labels": b_labels}
+    def _worker():
+        while not state.quit_event.is_set():
+            try:
+                cb = state.get_next_batch_it()
+                data_slice = data[cb * batch_size:min((cb + 1) * batch_size, len(data))]
+                b = processor(data_slice)
+                state.push_done_batch(b)
+            except StopIteration:
+                break
 
-        return feed_dict
+    workers = []
+    for i in range(worker_count):
+        worker = Thread(target=_worker)
+        worker.start()
+        workers.append(worker)
+    try:
+        while not state.quit_event.is_set() and not state.all_done():
+            item = state.queue.get()
+            state.queue.task_done()
+            yield item
+            if state.progress_bar is not None:
+                state.progress_bar.increment()
+
+    except GeneratorExit:
+        state.quit_event.set()
+        while not state.queue.empty():
+            try:
+                state.queue.get(False)
+            except Empty:
+                continue
+            state.queue.task_done()
 
 
-# For testing
+class ProgressBar:
+    def __init__(self, total_iterations, prefix='Progress:', suffix='', decimals=1, length=70, fill='#'):
+        self.format_string = "\r%s |%%s| %%.%df%%%% [%%d/%d] %s" % (prefix, decimals, total_iterations, suffix)
+        self.total_iterations = total_iterations
+        self.length = length
+        self.fill = fill
+        self.current_iteration = 0
+
+    def increment(self, val=1):
+        self.current_iteration += val
+        percent = 100 * (self.current_iteration / float(self.total_iterations))
+        filled_length = int(self.length * self.current_iteration // self.total_iterations)
+        bar = self.fill * filled_length + '-' * (self.length - filled_length)
+        print(self.format_string % (bar, percent, self.current_iteration, ), end='\r')
+        if self.current_iteration == self.total_iterations:
+            print()
+
+# Example
 if __name__ == '__main__':
-    import matplotlib.pyplot as plt
-    from utils.cifar10_reader import Reader
+    from time import sleep
 
-    #r = Reader('data/cifar-10-batches-bin')
+    def process(x):
+        sleep(0.3)
+        return x + x
 
-    #p = BatchProvider(20, r.items)
-    with open('temp/items_train_nuswide_5000.10000.pkl', 'rb') as pkl:
-        p = BatchProvider(20, pickle.load(pkl))
+    data = [x for x in range(200)]
 
-    b = p.get_batches()
+    # Without printing progress
+    batches = batch_provider(data, 5, process, 4, report_progress=False)
 
-    ims = next(b)["images"]
-    for im in ims:
-        plt.imshow(im, interpolation='nearest')
-        plt.show()
+    for batch in batches:
+        print(batch)
+
+    # With printing progress
+    batches = batch_provider(data, 5, process, 4, report_progress=True)
+
+    for batch in batches:
+        pass
