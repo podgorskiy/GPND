@@ -14,7 +14,7 @@
 # ==============================================================================
 
 
-def find_maximum(_f, min_x, max_x, epsilon=1e-5):
+def find_maximum(f, min_x, max_x, epsilon=1e-5):
     def binary_search(l, r, fl, fr, epsilon):
         mid = l + (r - l) / 2
         fm = f(mid)

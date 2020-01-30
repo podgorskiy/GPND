@@ -110,7 +110,7 @@ for fold in range(5 if full_run else 1):
         for k, v in res.items():
             results[k].append(v)
 
-        save_results(results, "results_new.csv")
+        save_results(results, "results_new2.csv")
 
         # print("only_parallel")
         # res = novelty_detector_only_parallel.main(fold, [i], i, 10, mul)
