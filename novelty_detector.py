@@ -61,11 +61,12 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
     G = Generator(cfg.MODEL.LATENT_SIZE)
     E = Encoder(cfg.MODEL.LATENT_SIZE)
-    G.eval()
-    E.eval()
 
     G.load_state_dict(torch.load("Gmodel_%d_%d.pkl" %(folding_id, ic)))
     E.load_state_dict(torch.load("Emodel_%d_%d.pkl" %(folding_id, ic)))
+
+    G.eval()
+    E.eval()
 
     sample = torch.randn(64, cfg.MODEL.LATENT_SIZE).to(device)
     sample = G(sample.view(-1, cfg.MODEL.LATENT_SIZE, 1, 1)).cpu()
@@ -149,7 +150,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
         data_loader = make_dataloader(dataset, cfg.TEST.BATCH_SIZE, 0)
 
-        include_jacobian = False
+        include_jacobian = True
 
         for label, x in data_loader:
             x = x.view(-1, 32 * 32)
@@ -189,7 +190,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
                 logPe = np.log(r_pdf(distance, bin_edges, counts))  # p_{\|W^{\perp}\|} (\|w^{\perp}\|)
                 logPe -= np.log(distance) * (32 * 32 - cfg.MODEL.LATENT_SIZE) * mul  # \| w^{\perp} \|}^{m-n}
 
-                P = -logD + logPz + logPe
+                P = logD + logPz + logPe
 
                 result.append(P)
                 gt_novel.append(label[i].item() in inliner_classes)
@@ -223,7 +224,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
             false_negative = np.sum(np.logical_and(np.logical_not(y), y_true))
             return get_f1(true_positive, false_positive, false_negative)
 
-        best_th, best_f1 = find_maximum(evaluate, minP, maxP, 1e-3)
+        best_th, best_f1 = find_maximum(evaluate, minP, maxP, 1e-4)
 
         logger.info("Best e: %f best f1: %f" % (best_th, best_f1))
         return best_th
@@ -257,7 +258,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
     for p in percentages:
         plt.figure(num=None, figsize=(8, 6), dpi=180, facecolor='w', edgecolor='k')
-        e = compute_threshold(valid_set, p)
+        e = -442.8386352538568  # compute_threshold(valid_set, p)
         results[p] = test(test_set, p, e)
 
         plt.xticks(fontsize=ticks_size)
