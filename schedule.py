@@ -5,11 +5,22 @@ import novelty_detector_without_d
 import novelty_detector_only_error
 import novelty_detector_only_parallel
 import csv
+import logging
+import sys
 
 
 full_run = False
 
 percentages = [10, 20, 30, 40, 50]
+
+logger = logging.getLogger("logger")
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler(stream=sys.stdout)
+ch.setLevel(logging.DEBUG)
+formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s")
+ch.setFormatter(formatter)
+logger.addHandler(ch)
+
 
 def save_results(results, filename):
     f = open(filename, 'wt')
@@ -101,7 +112,7 @@ for percentage in percentages:
 mul = 0.25
 
 for fold in range(5 if full_run else 1):
-    for i in range(10):
+    for i in range(1):
         # train_AAE.main(fold, [i], i, 10)
         
         print("All")
@@ -110,7 +121,7 @@ for fold in range(5 if full_run else 1):
         for k, v in res.items():
             results[k].append(v)
 
-        save_results(results, "results_new2.csv")
+        save_results(results, "results_new3.csv")
 
         # print("only_parallel")
         # res = novelty_detector_only_parallel.main(fold, [i], i, 10, mul)
