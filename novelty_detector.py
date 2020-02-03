@@ -32,8 +32,7 @@ from utils.threshold_search import find_maximum
 from utils.save_plot import save_plot
 import matplotlib.pyplot as plt
 import scipy.stats
-import os
-from sklearn.metrics import roc_auc_score
+from scipy.special import loggamma
 from timeit import default_timer as timer
 
 title_size = 16
@@ -133,13 +132,13 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
     with open("data_dump.pkl", "rb") as file:
         counts, bin_edges, gennorm_param = pickle.load(file)
 
-    def r_pdf(x, bins, count):
+    def r_pdf(x, bins, counts):
+        if bins[0] < x < bins[-1]:
+            i = np.digitize(x, bins) - 1
+            return counts[i]
         if x < bins[0]:
-            return max(count[0], 1e-308)
-        if x >= bins[-1]:
-            return max(count[-1], 1e-308)
-        id = np.digitize(x, bins) - 1
-        return max(count[id], 1e-308)
+            return counts[0] * x / bins[0]
+        return 1e-308
 
     def run_novely_prediction_on_dataset(dataset, percentage, concervative=False):
         dataset.shuffle()
@@ -150,7 +149,15 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
         data_loader = make_dataloader(dataset, cfg.TEST.BATCH_SIZE, 0)
 
-        include_jacobian = True
+        include_jacobian = False
+
+        N = (20 * 20 - cfg.MODEL.LATENT_SIZE) * mul
+        logC = loggamma(N / 2.0) - (N / 2.0) * np.log(2.0 * np.pi)
+
+        def logPe_func(x):
+            # p_{\|W^{\perp}\|} (\|w^{\perp}\|)
+            # \| w^{\perp} \|}^{m-n}
+            return logC - (N - 1) * np.log(x) + np.log(r_pdf(x, bin_edges, counts))
 
         for label, x in data_loader:
             x = x.view(-1, 32 * 32)
@@ -187,8 +194,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
                 distance = np.linalg.norm(x[i].flatten() - recon_batch[i].flatten())
 
-                logPe = np.log(r_pdf(distance, bin_edges, counts))  # p_{\|W^{\perp}\|} (\|w^{\perp}\|)
-                logPe -= np.log(distance) * (32 * 32 - cfg.MODEL.LATENT_SIZE) * mul  # \| w^{\perp} \|}^{m-n}
+                logPe = logPe_func(distance)
 
                 P = logD + logPz + logPe
 
@@ -258,7 +264,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
     for p in percentages:
         plt.figure(num=None, figsize=(8, 6), dpi=180, facecolor='w', edgecolor='k')
-        e = -442.8386352538568  # compute_threshold(valid_set, p)
+        e = compute_threshold(valid_set, p)
         results[p] = test(test_set, p, e)
 
         plt.xticks(fontsize=ticks_size)
