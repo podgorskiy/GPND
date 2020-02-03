@@ -51,7 +51,7 @@ def extract_statistics(cfg, train_set, inliner_classes, E, G):
     zlist = []
     rlist = []
 
-    data_loader = make_dataloader(train_set, cfg.TEST.BATCH_SIZE, 0)
+    data_loader = make_dataloader(train_set, cfg.TEST.BATCH_SIZE, torch.cuda.current_device())
 
     for label, x in data_loader:
         x = x.view(-1, 32 * 32)
@@ -144,7 +144,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
         result = []
         gt_novel = []
 
-        data_loader = make_dataloader(dataset, cfg.TEST.BATCH_SIZE, 0)
+        data_loader = make_dataloader(dataset, cfg.TEST.BATCH_SIZE, torch.cuda.current_device())
 
         include_jacobian = False
 
