@@ -23,7 +23,7 @@ import numpy as np
 import logging
 import scipy.optimize
 import pickle
-from dataloading import make_datasets, make_dataloader, make_model_name, create_set_with_outlier_percentage
+from dataloading import make_datasets, make_dataloader, create_set_with_outlier_percentage
 from defaults import get_cfg_defaults
 from evaluation import get_f1, evaluate
 from utils.threshold_search import find_maximum
@@ -32,10 +32,6 @@ import matplotlib.pyplot as plt
 import scipy.stats
 from scipy.special import loggamma
 from timeit import default_timer as timer
-
-title_size = 16
-axis_title_size = 14
-ticks_size = 18
 
 
 def r_pdf(x, bins, counts):
@@ -54,8 +50,8 @@ def extract_statistics(cfg, train_set, inliner_classes, E, G):
     data_loader = make_dataloader(train_set, cfg.TEST.BATCH_SIZE, torch.cuda.current_device())
 
     for label, x in data_loader:
-        x = x.view(-1, 32 * 32)
-        z = E(x.view(-1, 1, 32, 32))
+        x = x.view(-1, cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE)
+        z = E(x.view(-1, 1, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE))
         recon_batch = G(z)
         z = z.squeeze()
 
@@ -133,7 +129,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
     sample = torch.randn(64, cfg.MODEL.LATENT_SIZE).to(device)
     sample = G(sample.view(-1, cfg.MODEL.LATENT_SIZE, 1, 1)).cpu()
-    save_image(sample.view(64, 1, 32, 32), 'sample.png')
+    save_image(sample.view(64, 1, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE), 'sample.png')
 
     counts, bin_edges, gennorm_param = extract_statistics(cfg, train_set, inliner_classes, E, G)
 
@@ -148,7 +144,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
         include_jacobian = False
 
-        N = (20 * 20 - cfg.MODEL.LATENT_SIZE) * mul
+        N = (cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE - cfg.MODEL.LATENT_SIZE) * mul
         logC = loggamma(N / 2.0) - (N / 2.0) * np.log(2.0 * np.pi)
 
         def logPe_func(x):
@@ -157,10 +153,10 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
             return logC - (N - 1) * np.log(x) + np.log(r_pdf(x, bin_edges, counts))
 
         for label, x in data_loader:
-            x = x.view(-1, 32 * 32)
+            x = x.view(-1, cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE)
             x = Variable(x.data, requires_grad=True)
 
-            z = E(x.view(-1, 1, 32, 32))
+            z = E(x.view(-1, 1, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE))
             recon_batch = G(z)
             z = z.squeeze()
 
@@ -225,8 +221,8 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
         y_scores, y_true = run_novely_prediction_on_dataset(test_set, percentage, concervative=True)
         return evaluate(logger, percentage, inliner_classes, y_scores, threshold, y_true)
 
-    #percentages = [10, 20, 30, 40, 50]
-    percentages = [50]
+    percentages = cfg.DATASET.PERCENTAGES
+    # percentages = [50]
 
     results = {}
 

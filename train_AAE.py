@@ -21,7 +21,7 @@ from torch.autograd import Variable
 import time
 import logging
 import os
-from dataloading import make_datasets, make_dataloader, make_model_name
+from dataloading import make_datasets, make_dataloader
 from net import Generator, Discriminator, Encoder, ZDiscriminator_mergebatch, ZDiscriminator
 from utils.tracker import LossTracker
 import torch.nn as nn
@@ -43,13 +43,13 @@ def train(folding_id, inliner_classes, ic):
 
     logger.info("Train set size: %d" % len(train_set))
 
-    G = Generator(cfg.MODEL.LATENT_SIZE)
+    G = Generator(cfg.MODEL.LATENT_SIZE,channels=cfg.MODEL.CHANNELS)
     G.weight_init(mean=0, std=0.02)
 
-    D = Discriminator()
+    D = Discriminator(channels=cfg.MODEL.CHANNELS)
     D.weight_init(mean=0, std=0.02)
 
-    E = Encoder(cfg.MODEL.LATENT_SIZE)
+    E = Encoder(cfg.MODEL.LATENT_SIZE, channels=cfg.MODEL.CHANNELS)
     E.weight_init(mean=0, std=0.02)
 
     if cfg.MODEL.Z_DISCRIMINATOR_CROSS_BATCH:
@@ -89,7 +89,7 @@ def train(folding_id, inliner_classes, ic):
             print("learning rate change!")
 
         for y, x in data_loader:
-            x = x.view(-1, 1, 32, 32)
+            x = x.view(-1, 1, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE)
 
             y_real_ = torch.ones(x.shape[0])
             y_fake_ = torch.zeros(x.shape[0])
@@ -193,7 +193,7 @@ def train(folding_id, inliner_classes, ic):
 
         with torch.no_grad():
             resultsample = G(sample).cpu()
-            save_image(resultsample.view(64, 1, 32, 32), os.path.join(output_folder, 'sample_' + str(epoch) + '.png'))
+            save_image(resultsample.view(64, 1, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE), os.path.join(output_folder, 'sample_' + str(epoch) + '.png'))
 
     logger.info("Training finish!... save training results")
 

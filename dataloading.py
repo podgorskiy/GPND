@@ -136,7 +136,3 @@ def create_set_with_outlier_percentage(dataset, inliner_classes, target_percenta
     assert abs(real_percetage - target_percentage) < 0.01, "Didn't create dataset with requested percentage of outliers"
 
     return dataset
-
-
-def make_model_name(folding_id, inliner_classes):
-    return "model_fold_%d_inlier_%s.pth" % (folding_id, "_".join([str(x) for x in inliner_classes]))
