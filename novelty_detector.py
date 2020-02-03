@@ -118,8 +118,8 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
     train_set.shuffle()
 
-    G = Generator(cfg.MODEL.LATENT_SIZE)
-    E = Encoder(cfg.MODEL.LATENT_SIZE)
+    G = Generator(cfg.MODEL.LATENT_SIZE, channels=cfg.MODEL.INPUT_IMAGE_CHANNELS)
+    E = Encoder(cfg.MODEL.LATENT_SIZE, channels=cfg.MODEL.INPUT_IMAGE_CHANNELS)
 
     G.load_state_dict(torch.load("models/Gmodel_%d_%d.pkl" %(folding_id, ic)))
     E.load_state_dict(torch.load("models/Emodel_%d_%d.pkl" %(folding_id, ic)))
@@ -129,7 +129,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
     sample = torch.randn(64, cfg.MODEL.LATENT_SIZE).to(device)
     sample = G(sample.view(-1, cfg.MODEL.LATENT_SIZE, 1, 1)).cpu()
-    save_image(sample.view(64, 1, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE), 'sample.png')
+    save_image(sample.view(64, cfg.MODEL.INPUT_IMAGE_CHANNELS, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE), 'sample.png')
 
     counts, bin_edges, gennorm_param = extract_statistics(cfg, train_set, inliner_classes, E, G)
 
@@ -153,10 +153,10 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
             return logC - (N - 1) * np.log(x) + np.log(r_pdf(x, bin_edges, counts))
 
         for label, x in data_loader:
-            x = x.view(-1, cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE)
+            x = x.view(-1, cfg.MODEL.INPUT_IMAGE_CHANNELS * cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE)
             x = Variable(x.data, requires_grad=True)
 
-            z = E(x.view(-1, 1, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE))
+            z = E(x.view(-1, cfg.MODEL.INPUT_IMAGE_CHANNELS, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE))
             recon_batch = G(z)
             z = z.squeeze()
 

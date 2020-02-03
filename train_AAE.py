@@ -43,13 +43,13 @@ def train(folding_id, inliner_classes, ic):
 
     logger.info("Train set size: %d" % len(train_set))
 
-    G = Generator(cfg.MODEL.LATENT_SIZE,channels=cfg.MODEL.CHANNELS)
+    G = Generator(cfg.MODEL.LATENT_SIZE, channels=cfg.MODEL.INPUT_IMAGE_CHANNELS)
     G.weight_init(mean=0, std=0.02)
 
-    D = Discriminator(channels=cfg.MODEL.CHANNELS)
+    D = Discriminator(channels=cfg.MODEL.INPUT_IMAGE_CHANNELS)
     D.weight_init(mean=0, std=0.02)
 
-    E = Encoder(cfg.MODEL.LATENT_SIZE, channels=cfg.MODEL.CHANNELS)
+    E = Encoder(cfg.MODEL.LATENT_SIZE, channels=cfg.MODEL.INPUT_IMAGE_CHANNELS)
     E.weight_init(mean=0, std=0.02)
 
     if cfg.MODEL.Z_DISCRIMINATOR_CROSS_BATCH:
@@ -89,7 +89,7 @@ def train(folding_id, inliner_classes, ic):
             print("learning rate change!")
 
         for y, x in data_loader:
-            x = x.view(-1, 1, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE)
+            x = x.view(-1, cfg.MODEL.INPUT_IMAGE_CHANNELS, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE)
 
             y_real_ = torch.ones(x.shape[0])
             y_fake_ = torch.zeros(x.shape[0])
@@ -193,7 +193,11 @@ def train(folding_id, inliner_classes, ic):
 
         with torch.no_grad():
             resultsample = G(sample).cpu()
-            save_image(resultsample.view(64, 1, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE), os.path.join(output_folder, 'sample_' + str(epoch) + '.png'))
+            save_image(resultsample.view(64,
+                                         cfg.MODEL.INPUT_IMAGE_CHANNELS,
+                                         cfg.MODEL.INPUT_IMAGE_SIZE,
+                                         cfg.MODEL.INPUT_IMAGE_SIZE),
+                       os.path.join(output_folder, 'sample_' + str(epoch) + '.png'))
 
     logger.info("Training finish!... save training results")
 
