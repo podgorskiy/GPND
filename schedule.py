@@ -1,15 +1,10 @@
 from save_to_csv import save_results
 import logging
 import sys
-import multiprocessing
-from multiprocessing import Process, Pipe
-import os
 import utils.multiprocessing
 
 
 full_run = False
-
-percentages = [10, 20, 30, 40, 50]
 
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
