@@ -2,7 +2,9 @@ from save_to_csv import save_results
 import logging
 import sys
 import multiprocessing
+from multiprocessing import Process, Pipe
 import os
+import utils.multiprocessing
 
 
 full_run = False
@@ -18,51 +20,32 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 
-results = []
 mul = 0.25
 
 settings = []
 
-gpu_count = 4 #  torch.cuda.device_count()
+classes_count = 10
 
-cpu_count = multiprocessing.cpu_count()
-os.environ["OMP_NUM_THREADS"] = str(max(1, int(cpu_count / gpu_count)))
-
-
-def init(queue):
-    global idx
-    idx = queue.get()
+for fold in range(5 if full_run else 1):
+    for i in range(classes_count):
+        settings.append(dict(fold=fold, digit=i))
 
 
 def f(setting):
-    global idx
-    import torch
     import train_AAE
     import novelty_detector
-    # train_AAE.main(fold, [i], i, 10)
-    print("Running on GPU: %d" % idx)
-    torch.set_default_tensor_type('torch.cuda.FloatTensor')
-    torch.cuda.set_device(idx)
-    device = torch.cuda.current_device()
-    print("Running on ", torch.cuda.get_device_name(device))
 
-    res = novelty_detector.main(setting['fold'], [setting['digit']], setting['digit'], 10, mul)
+    fold_id = setting['fold']
+    inliner_classes = setting['digit']
+
+    train_AAE.train(fold_id, [inliner_classes], inliner_classes)
+
+    res = novelty_detector.main(fold_id, [inliner_classes], inliner_classes, classes_count, mul)
     return res
 
 
-ids = range(gpu_count)
-manager = multiprocessing.Manager()
-idQueue = manager.Queue()
+gpu_count = utils.multiprocessing.get_gpu_count()
 
-for i in ids:
-    idQueue.put(i)
-
-for fold in range(5 if full_run else 1):
-    for i in range(0, 10):
-        settings.append(dict(fold=fold, digit=i))
-
-p = multiprocessing.Pool(gpu_count, init, (idQueue,))
-
-results = p.map(f, settings)
+results = utils.multiprocessing.map(f, gpu_count, settings)
 
 save_results(results, "results_new3.csv")

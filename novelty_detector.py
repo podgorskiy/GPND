@@ -125,8 +125,8 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
     G = Generator(cfg.MODEL.LATENT_SIZE)
     E = Encoder(cfg.MODEL.LATENT_SIZE)
 
-    G.load_state_dict(torch.load("Gmodel_%d_%d.pkl" %(folding_id, ic)))
-    E.load_state_dict(torch.load("Emodel_%d_%d.pkl" %(folding_id, ic)))
+    G.load_state_dict(torch.load("models/Gmodel_%d_%d.pkl" %(folding_id, ic)))
+    E.load_state_dict(torch.load("models/Emodel_%d_%d.pkl" %(folding_id, ic)))
 
     G.eval()
     E.eval()
@@ -192,8 +192,6 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
                 distance = np.linalg.norm(x[i].flatten() - recon_batch[i].flatten())
 
                 logPe = logPe_func(distance)
-                if not np.isfinite(logPe):
-                    print("!")
 
                 P = logD + logPz + logPe
 
