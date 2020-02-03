@@ -124,5 +124,5 @@ def evaluate(logger, percentage_of_outliers, inliner_classes, prediction, thresh
             "\nDetection: %f\nauprin: %f\nauprout: %f\n\n" %
             ("_".join([str(x) for x in inliner_classes]), percentage_of_outliers, error, f1, auc, fpr95, error, auprin, auprout))
 
-    #return dict(auc=auc, f1=f1, fpr95=fpr95, error=error, auprin=auprin, auprout=auprout)
-    return auc, f1, fpr95, error, auprin, auprout
+    return dict(auc=auc, f1=f1, fpr95=fpr95, error=error, auprin=auprin, auprout=auprout)
+    # return auc, f1, fpr95, error, auprin, auprout
