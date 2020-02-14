@@ -168,9 +168,9 @@ def train(folding_id, inliner_classes, ic):
 
             ZD_result = ZD(z.squeeze()).squeeze()
 
-            E_train_loss = BCE_loss(ZD_result, y_real_z) * 2.0
+            E_train_loss = BCE_loss(ZD_result, y_real_z) * 1.0
 
-            Recon_loss = F.binary_cross_entropy(x_d, x.detach()) * 0.3
+            Recon_loss = F.binary_cross_entropy(x_d, x.detach()) * 2.0
 
             (Recon_loss + E_train_loss).backward()
 

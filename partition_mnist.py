@@ -34,13 +34,11 @@ def get_mnist():
 
     assert(images.shape == (70000, 28, 28))
 
-    # _images = []
-    # for im in images:
-    #     im = misc.imresize(im, (32, 32), interp='bilinear')
-    #     _images.append(im)
-    # images = np.asarray(_images)
-
-    images = np.pad(images, ((0, 0), (2, 2), (2, 2)), mode='constant')
+    _images = []
+    for im in images:
+        im = misc.imresize(im, (32, 32), interp='bilinear')
+        _images.append(im)
+    images = np.asarray(_images)
 
     assert(images.shape == (70000, 32, 32))
 

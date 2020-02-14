@@ -142,7 +142,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
         data_loader = make_dataloader(dataset, cfg.TEST.BATCH_SIZE, torch.cuda.current_device())
 
-        include_jacobian = False
+        include_jacobian = True
 
         N = (cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE - cfg.MODEL.LATENT_SIZE) * mul
         logC = loggamma(N / 2.0) - (N / 2.0) * np.log(2.0 * np.pi)
@@ -172,7 +172,8 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
             for i in range(x.shape[0]):
                 if include_jacobian:
                     u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
-                    logD = np.sum(np.log(np.abs(s))) # | \mathrm{det} S^{-1} |
+                    logD = -np.sum(np.log(np.abs(s)))  # | \mathrm{det} S^{-1} |
+                    # logD = np.log(np.abs(1.0/(np.prod(s))))
                 else:
                     logD = 0
 
