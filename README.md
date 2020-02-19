@@ -35,8 +35,9 @@ You will need to run **partition_mnist.py** first.
 Then run **schedule.py**. It will run as many concurent experiments as many GPUs are available. Reusults will be written to **results.csv** file
 
 ___
-Alter
-Then from **train_AAE.py**, you need to call *main* function:
+Alternatively, you can call directly functions from **train_AAE.py** and **novelty_detector.py**
+
+Train autoenctoder with **train_AAE.py**, you need to call *train* function:
 
     train_AAE.train(
       folding_id,
