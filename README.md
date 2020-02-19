@@ -9,8 +9,17 @@ Lane Department of Computer Science and Electrical Engineering, West
     
 [The e-preprint of the article on arxiv](https://arxiv.org/abs/1807.02588).
 
-*The code is going to be cleaned up soon.*
-*The code for other datasets will be added soon.*
+[NeurIPS Proceedings](https://papers.nips.cc/paper/7915-generative-probabilistic-novelty-detection-with-adversarial-autoencoders).
+
+
+    @inproceedings{pidhorskyi2018generative,
+      title={Generative probabilistic novelty detection with adversarial autoencoders},
+      author={Pidhorskyi, Stanislav and Almohsen, Ranya and Doretto, Gianfranco},
+      booktitle={Advances in neural information processing systems},
+      pages={6822--6833},
+      year={2018}
+    }
+
 
 ### Content
 
@@ -23,20 +32,22 @@ Lane Department of Computer Science and Electrical Engineering, West
 
 You will need to run **partition_mnist.py** first.
 
+Then run **schedule.py**. It will run as many concurent experiments as many GPUs are available. Reusults will be written to **results.csv** file
+
+___
+Alter
 Then from **train_AAE.py**, you need to call *main* function:
 
-    train_AAE.main(
+    train_AAE.train(
       folding_id,
       inliner_classes,
-      total_classes,
-      folds=5
+      ic
     )
   
    Args:
    -  folding_id: Id of the fold. For MNIST, 5 folds are generated, so folding_id must be in range [0..5]
    -  inliner_classes: List of classes considered inliers.
-   -  total_classes: Total count of classes.
-   -  folds: Number of folds.
+   -  ic: inlier class set index (used to save model with unique filename).
    
 After autoencoder was trained, from **novelty_detector.py**, you need to call *main* function:
 
@@ -44,13 +55,17 @@ After autoencoder was trained, from **novelty_detector.py**, you need to call *m
       folding_id,
       inliner_classes,
       total_classes,
+      mul,
       folds=5
     )
-  
-   Set of arguments is the same.
-
+   -  folding_id: Id of the fold. For MNIST, 5 folds are generated, so folding_id must be in range [0..5]
+   -  inliner_classes: List of classes considered inliers.
+   -  ic: inlier class set index (used to save model with unique filename).
+   -  total_classes: Total count of classes (deprecated, moved to config).
+   -  mul: multiplier for power correction. Default value 0.2.
+   -  folds: Number of folds (deprecated, moved to config).
+   
 ### Generated/Reconstructed images
-
 
 ![MNIST Reconstruction](images/reconstruction_58.png?raw=true "MNIST Reconstruction")
 
@@ -90,3 +105,4 @@ After autoencoder was trained, from **novelty_detector.py**, you need to call *m
 ![PDF](images/PDF.png?raw=true "PDF")
 
 *PDF of the latent space for MNIST. Size of the latent space - 32*
+
