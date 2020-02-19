@@ -4,7 +4,7 @@ import sys
 import utils.multiprocessing
 
 
-full_run = False
+full_run = True
 
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
@@ -15,7 +15,7 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 
-mul = 0.25
+mul = 0.2
 
 settings = []
 
@@ -43,4 +43,4 @@ gpu_count = utils.multiprocessing.get_gpu_count()
 
 results = utils.multiprocessing.map(f, gpu_count, settings)
 
-save_results(results, "results_new3.csv")
+save_results(results, "results.csv")
