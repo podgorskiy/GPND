@@ -32,15 +32,14 @@ import matplotlib.pyplot as plt
 import scipy.stats
 from scipy.special import loggamma
 from timeit import default_timer as timer
+import matplotlib.cm as cm
 
 
 def r_pdf(x, bins, counts):
     if bins[0] < x < bins[-1]:
         i = np.digitize(x, bins) - 1
         return max(counts[i], 1e-308)
-    if x < bins[0]:
-        return max(counts[0] * x / bins[0], 1e-308)
-    return 1e-308
+    return 1e-300
 
 
 def extract_statistics(cfg, train_set, E, G):
@@ -69,6 +68,8 @@ def extract_statistics(cfg, train_set, E, G):
     zlist = np.concatenate(zlist)
 
     counts, bin_edges = np.histogram(rlist, bins=30, normed=True)
+    zcounts1, zbin_edges1 = np.histogram(zlist[:, 0], bins=30, normed=True)
+    zcounts2, zbin_edges2 = np.histogram(zlist[:, 1], bins=30, normed=True)
 
     if cfg.MAKE_PLOTS:
         plt.plot(bin_edges[1:], counts, linewidth=2)
@@ -90,17 +91,17 @@ def extract_statistics(cfg, train_set, E, G):
         x0 = [2.0, 0.0, 1.0]
         return scipy.optimize.fmin(func, x0, args, xtol=1e-12, ftol=1e-12, disp=0)
 
-    gennorm_param = np.zeros([3, cfg.MODEL.LATENT_SIZE])
-    for i in range(cfg.MODEL.LATENT_SIZE):
-        betta, loc, scale = scipy.stats.gennorm.fit(zlist[:, i], optimizer=fmin)
-        gennorm_param[0, i] = betta
-        gennorm_param[1, i] = loc
-        gennorm_param[2, i] = scale
+    # gennorm_param = np.zeros([3, cfg.MODEL.LATENT_SIZE])
+    # for i in range(cfg.MODEL.LATENT_SIZE):
+    #     betta, loc, scale = scipy.stats.gennorm.fit(zlist[:, i], optimizer=fmin)
+    #     gennorm_param[0, i] = betta
+    #     gennorm_param[1, i] = loc
+    #     gennorm_param[2, i] = scale
 
-    return counts, bin_edges, gennorm_param
+    return counts, bin_edges, zcounts1, zbin_edges1, zcounts2, zbin_edges2
 
 
-def main(mul):
+def main():
     cfg = get_cfg_defaults()
     cfg.merge_from_file('configs/toy.yaml')
     cfg.freeze()
@@ -129,16 +130,11 @@ def main(mul):
     G.eval()
     E.eval()
 
-    counts, bin_edges, gennorm_param = extract_statistics(cfg, train_set, E, G)
+    counts, bin_edges, zcounts1, zbin_edges1, zcounts2, zbin_edges2 = extract_statistics(cfg, train_set, E, G)
 
-    def run_novely_prediction_on_dataset(dataset, percentage, concervative=False):
-        dataset.shuffle()
-        dataset = create_set_with_outlier_percentage(dataset, percentage, concervative)
-
+    def run_novely_prediction_on_dataset():
         result = []
         gt_novel = []
-
-        data_loader = make_dataloader(dataset, cfg.TEST.BATCH_SIZE, torch.cuda.current_device())
 
         include_jacobian = True
 
@@ -150,13 +146,15 @@ def main(mul):
             # \| w^{\perp} \|}^{m-n}
             return logC - (N - 1) * np.log(x) + np.log(r_pdf(x, bin_edges, counts))
 
-        for label, x in data_loader:
-            x = x.view(-1, cfg.MODEL.INPUT_IMAGE_CHANNELS)
+        x = y = np.arange(-2.0, 2.0, 0.02)
+        X, Y = np.meshgrid(x, y)
+
+        for _x, _y in zip(X.flatten(), Y.flatten()):
+            x = torch.tensor([[_x, _y]], dtype=torch.float32)
             x = Variable(x.data, requires_grad=True)
 
             z = E(x.view(-1, cfg.MODEL.INPUT_IMAGE_CHANNELS))
             recon_batch = G(z)
-            z = z.squeeze()
 
             if include_jacobian:
                 r = recon_batch.detach()
@@ -164,9 +162,6 @@ def main(mul):
                 z = E(r.view(-1, cfg.MODEL.INPUT_IMAGE_CHANNELS))
                 J = compute_jacobian(r, z)
                 J = J.cpu().numpy()
-
-                #J = compute_jacobian(x, z)
-                #J = J.cpu().numpy()
 
                 # with torch.no_grad():
                 #     J = torch.zeros(cfg.MODEL.LATENT_SIZE, x.shape[0], 2, requires_grad=False)
@@ -191,20 +186,23 @@ def main(mul):
 
             z = z.cpu().detach().numpy()
 
-            recon_batch = recon_batch.squeeze().cpu().detach().numpy()
-            x = x.squeeze().cpu().detach().numpy()
+            recon_batch = recon_batch.cpu().detach().numpy()
+            x = x.cpu().detach().numpy()
 
             for i in range(x.shape[0]):
                 if include_jacobian:
                     u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
-                    logD = np.sum(np.log(np.abs(s)))  # | \mathrm{det} S^{-1} |
-                    # logD = -np.log(np.abs(np.prod(1.0/s)))
-
+                    # logD = np.sum(np.log(np.abs(s)))  # | \mathrm{det} S^{-1} |
+                    # logD = np.sum(np.log(np.prod(1.0 / s)))  # | \mathrm{det} S^{-1} |
+                    logD = np.log(np.abs((np.prod(s))))
                 else:
                     logD = 0
 
-                p = scipy.stats.gennorm.pdf(z[i], gennorm_param[0, :], gennorm_param[1, :], gennorm_param[2, :])
-                logPz = np.sum(np.log(p))
+                #p = scipy.stats.gennorm.pdf(z[i], gennorm_param[0, :], gennorm_param[1, :], gennorm_param[2, :])
+                p1 = r_pdf(z[i][0], zbin_edges1, zcounts1)
+                p2 = r_pdf(z[i][1], zbin_edges2, zcounts2)
+
+                logPz = np.sum(np.log([p1, p2]))
 
                 # Sometimes, due to rounding some element in p may be zero resulting in Inf in logPz
                 # In this case, just assign some large negative value to make sure that the sample
@@ -216,47 +214,92 @@ def main(mul):
 
                 logPe = logPe_func(distance)
 
-                P = logPe + logPz + logD
+                P = logD
 
                 result.append(P)
-                gt_novel.append(label[i].item())
 
-        result = np.asarray(result, dtype=np.float32)
-        ground_truth = np.asarray(gt_novel, dtype=np.float32)
-        return result, ground_truth
+        Z = np.asarray(result)
+        Z = Z.reshape(X.shape)
 
-    def compute_threshold(valid_set, percentage):
-        y_scores, y_true = run_novely_prediction_on_dataset(valid_set, percentage, concervative=True)
+        print(dict(vmax=Z.max(), vmin=Z.min()))
 
-        minP = min(y_scores) - 1
-        maxP = max(y_scores) + 1
-        y_false = np.logical_not(y_true)
+        fig, ax = plt.subplots()
+        im = ax.imshow(Z, interpolation='bilinear', cmap=cm.gray,
+                       origin='lower', extent=[-2.0, 2.0, -2.0, 2.0],
+                       vmax=Z.max(), vmin=-10)
 
-        def evaluate(e):
-            y = np.greater(y_scores, e)
-            true_positive = np.sum(np.logical_and(y, y_true))
-            false_positive = np.sum(np.logical_and(y, y_false))
-            false_negative = np.sum(np.logical_and(np.logical_not(y), y_true))
-            return get_f1(true_positive, false_positive, false_negative)
+        n = 10000
+        r_0 = 2.0 * np.pi
+        n_turns = 1.5
+        r = np.sqrt(np.random.rand(n) * (np.square(n_turns * 2.0 * np.pi + r_0) - r_0 * r_0) + r_0 * r_0)
 
-        best_th, best_f1 = find_maximum(evaluate, minP, maxP, 1e-4)
+        t = r - r_0
 
-        logger.info("Best e: %f best f1: %f" % (best_th, best_f1))
-        return best_th
+        x = np.cos(t) * r * 0.1
+        y = np.sin(t) * r * 0.1
+        ax.scatter(x, y, c='tab:blue', s=1, label='inliers',
+                   alpha=0.3, edgecolors='none')
 
-    def test(test_set, percentage, threshold):
-        y_scores, y_true = run_novely_prediction_on_dataset(test_set, percentage, concervative=True)
-        return evaluate(logger, percentage, y_scores, threshold, y_true)
+        plt.show()
 
-    # percentages = cfg.DATASET.PERCENTAGES
-    percentages = [50]
+    def plot_vector_field():
+        result_x = []
+        result_y = []
+        gt_novel = []
 
-    results = {}
+        include_jacobian = True
 
-    for p in percentages:
-        plt.figure(num=None, figsize=(8, 6), dpi=180, facecolor='w', edgecolor='k')
-        e = compute_threshold(valid_set, p)
-        results[p] = test(test_set, p, e)
+        N = 2
+        logC = loggamma(N / 2.0) - (N / 2.0) * np.log(2.0 * np.pi)
 
-    return results
+        def logPe_func(x):
+            # p_{\|W^{\perp}\|} (\|w^{\perp}\|)
+            # \| w^{\perp} \|}^{m-n}
+            return logC - (N - 1) * np.log(x) + np.log(r_pdf(x, bin_edges, counts))
 
+        x = y = np.arange(-2.0, 2.0, 0.1)
+        X, Y = np.meshgrid(x, y)
+
+        for _x, _y in zip(X.flatten(), Y.flatten()):
+            x = torch.tensor([[_x, _y]], dtype=torch.float32)
+            x = Variable(x.data, requires_grad=True)
+
+            z = E(x.view(-1, cfg.MODEL.INPUT_IMAGE_CHANNELS))
+            recon_batch = G(z)
+
+            result_x.append(recon_batch[0, 0].item())
+            result_y.append(recon_batch[0, 1].item())
+
+        result_x = np.asarray(result_x)
+        result_y = np.asarray(result_y)
+
+        fig, ax = plt.subplots(figsize=(20, 20))
+        ax.set_aspect('equal')
+
+        ax.quiver(X.flatten(), Y.flatten(), (result_x - X.flatten()) * 0.1, (result_y - Y.flatten()) * 0.1, units='xy', scale=1)
+
+        #
+        # im = ax.imshow(Z, interpolation='bilinear', cmap=cm.gray,
+        #                origin='lower', extent=[-2.0, 2.0, -2.0, 2.0],
+        #                vmax=Z.max(), vmin=-10)
+
+        n = 10000
+        r_0 = 2.0 * np.pi
+        n_turns = 1.5
+        r = np.sqrt(np.random.rand(n) * (np.square(n_turns * 2.0 * np.pi + r_0) - r_0 * r_0) + r_0 * r_0)
+
+        t = r - r_0
+
+        x = np.cos(t) * r * 0.1
+        y = np.sin(t) * r * 0.1
+        ax.scatter(x, y, c='tab:blue', s=1, label='inliers',
+                   alpha=0.3, edgecolors='none')
+
+        plt.show()
+
+    # run_novely_prediction_on_dataset()
+    plot_vector_field()
+
+
+if __name__ == "__main__":
+    main()

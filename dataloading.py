@@ -15,17 +15,17 @@
 
 import torch.utils.data
 from net import *
-import pickle
 import numpy as np
-from os import path
 import dlutils
-import warnings
+from inlier_distribution import make_sampler
 
 
 class Dataset:
     @staticmethod
     def list_of_pairs_to_numpy(l):
-        return np.asarray([x[1] for x in l], np.float32), np.asarray([x[0] for x in l], np.int)
+        x1 = np.asarray([x[1] for x in l], np.float32)
+        x2 = np.asarray([x[0] for x in l], np.int)
+        return x1, x2
 
     def __init__(self, data):
         self.x, self.y = Dataset.list_of_pairs_to_numpy(data)
@@ -42,34 +42,27 @@ class Dataset:
         permutation = np.random.permutation(self.y.shape[0])
         for x in [self.y, self.x]:
             np.take(x, permutation, axis=0, out=x)
+        return self
 
 
-def make_datasets(cfg, folding_id, inliner_classes):
-    data_train = []
-    data_valid = []
+def make_datasets(cfg):
+    np.random.seed(1)
+    sampler_inlier = make_sampler('spiral')
+    sampler_outlier = make_sampler('uniform')
 
-    for i in range(cfg.DATASET.FOLDS_COUNT):
-        if i != folding_id:
-            with open(path.join(cfg.DATASET.PATH, 'data_fold_%d.pkl' % i), 'rb') as pkl:
-                fold = pickle.load(pkl)
-            if len(data_valid) == 0:
-                data_valid = fold
-            else:
-                data_train += fold
+    inliers = sampler_inlier(50000)
+    data_train = [(True, x) for x in inliers]
+    train_set = Dataset(data_train).shuffle()
 
-    outlier_classes = []
-    for i in range(cfg.DATASET.TOTAL_CLASS_COUNT):
-        if i not in inliner_classes:
-            outlier_classes.append(i)
+    inliers = sampler_inlier(10000)
+    outliers = sampler_outlier(10000)
+    data_valid = [(True, x) for x in inliers] + [(False, x) for x in outliers]
+    valid_set = Dataset(data_valid).shuffle()
 
-    data_train = [x for x in data_train if x[0] in inliner_classes]
-
-    with open(path.join(cfg.DATASET.PATH, 'data_fold_%d.pkl') % folding_id, 'rb') as pkl:
-        data_test = pickle.load(pkl)
-
-    train_set = Dataset(data_train)
-    valid_set = Dataset(data_valid)
-    test_set = Dataset(data_test)
+    inliers = sampler_inlier(10000)
+    outliers = sampler_outlier(10000)
+    data_test = [(True, x) for x in inliers] + [(False, x) for x in outliers]
+    test_set = Dataset(data_test).shuffle()
 
     return train_set, valid_set, test_set
 
@@ -82,7 +75,7 @@ def make_dataloader(dataset, batch_size, device):
         def __call__(self, batch):
             with torch.no_grad():
                 y, x = batch
-                x = torch.tensor(x / 255.0, requires_grad=True, dtype=torch.float32, device=self.device)
+                x = torch.tensor(x, requires_grad=True, dtype=torch.float32, device=self.device)
                 y = torch.tensor(y, dtype=torch.int32, device=self.device)
                 return y, x
 
@@ -90,11 +83,11 @@ def make_dataloader(dataset, batch_size, device):
     return data_loader
 
 
-def create_set_with_outlier_percentage(dataset, inliner_classes, target_percentage, concervative=True):
+def create_set_with_outlier_percentage(dataset, target_percentage, concervative=True):
     np.random.seed(0)
     dataset.shuffle()
-    dataset_outlier = [x for x in dataset if x[0] not in inliner_classes]
-    dataset_inliner = [x for x in dataset if x[0] in inliner_classes]
+    dataset_outlier = [x for x in dataset if not x[0]]
+    dataset_inliner = [x for x in dataset if x[0]]
 
     def increase_length(data_list, target_length):
         repeat = (target_length + len(data_list) - 1) // len(data_list)
@@ -130,8 +123,8 @@ def create_set_with_outlier_percentage(dataset, inliner_classes, target_percenta
     dataset.shuffle()
 
     # Post checks
-    outlier_count = len([1 for x in dataset if x[0] not in inliner_classes])
-    inliner_count = len([1 for x in dataset if x[0] in inliner_classes])
+    outlier_count = len([1 for x in dataset if not x[0]])
+    inliner_count = len([1 for x in dataset if x[0]])
     real_percetage = outlier_count * 100.0 / (outlier_count + inliner_count)
     assert abs(real_percetage - target_percentage) < 0.01, "Didn't create dataset with requested percentage of outliers"
 

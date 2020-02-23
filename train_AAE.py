@@ -16,7 +16,6 @@
 import torch.utils.data
 from defaults import get_cfg_defaults
 from torch import optim
-from torchvision.utils import save_image
 from torch.autograd import Variable
 import time
 import logging
@@ -26,49 +25,83 @@ from net import Generator, Discriminator, Encoder, ZDiscriminator_mergebatch, ZD
 from utils.tracker import LossTracker
 import torch.nn as nn
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
+from custom_adam import LREQAdam
+from torch.optim.rmsprop import RMSprop
+from torch.optim.adam import Adam
 
 
-def train(folding_id, inliner_classes, ic):
+def save_image(x, path):
+    fig, ax = plt.subplots()
+    x.cpu().numpy()
+
+    ax.scatter(x[:, 0], x[:, 1], c='tab:blue', s=10, label='generations',
+               alpha=0.3, edgecolors='none')
+
+    ax.legend()
+    ax.grid(True)
+
+    plt.savefig(path)
+    plt.close()
+
+
+def discriminator_logistic_simple_gp(d_result_fake, d_result_real, reals, r1_gamma=2.0):
+    # return F.binary_cross_entropy_with_logits(d_result_fake, torch.zeros_like(d_result_fake)) + F.binary_cross_entropy_with_logits(d_result_real, torch.ones_like(d_result_real))
+
+    loss = (F.softplus(d_result_fake) + F.softplus(-d_result_real))
+
+    if r1_gamma != 0.0:
+        real_loss = d_result_real.sum()
+        real_grads = torch.autograd.grad(real_loss, reals, create_graph=True, retain_graph=True)[0]
+        r1_penalty = torch.sum(real_grads.pow(2.0), dim=[1])
+        loss = loss + r1_penalty * (r1_gamma * 0.5)
+    return loss.mean()
+
+
+def generator_logistic_non_saturating(d_result_fake):
+    #return F.binary_cross_entropy_with_logits(d_result_real, torch.zeros_like(d_result_real))
+
+    return F.softplus(-d_result_fake).mean()
+
+
+def train():
     cfg = get_cfg_defaults()
-    cfg.merge_from_file('configs/mnist.yaml')
+    cfg.merge_from_file('configs/toy.yaml')
     cfg.freeze()
     logger = logging.getLogger("logger")
 
     zsize = cfg.MODEL.LATENT_SIZE
-    output_folder = os.path.join('results_' + str(folding_id) + "_" + "_".join([str(x) for x in inliner_classes]))
+    output_folder = 'results'
     os.makedirs(output_folder, exist_ok=True)
     os.makedirs('models', exist_ok=True)
 
-    train_set, _, _ = make_datasets(cfg, folding_id, inliner_classes)
+    train_set, _, _ = make_datasets(cfg)
 
     logger.info("Train set size: %d" % len(train_set))
 
     G = Generator(cfg.MODEL.LATENT_SIZE, channels=cfg.MODEL.INPUT_IMAGE_CHANNELS)
-    G.weight_init(mean=0, std=0.02)
 
     D = Discriminator(channels=cfg.MODEL.INPUT_IMAGE_CHANNELS)
-    D.weight_init(mean=0, std=0.02)
 
     E = Encoder(cfg.MODEL.LATENT_SIZE, channels=cfg.MODEL.INPUT_IMAGE_CHANNELS)
-    E.weight_init(mean=0, std=0.02)
 
     if cfg.MODEL.Z_DISCRIMINATOR_CROSS_BATCH:
         ZD = ZDiscriminator_mergebatch(zsize, cfg.TRAIN.BATCH_SIZE)
     else:
         ZD = ZDiscriminator(zsize, cfg.TRAIN.BATCH_SIZE)
-    ZD.weight_init(mean=0, std=0.02)
 
-    lr = cfg.TRAIN.BASE_LEARNING_RATE
+    lr = 0.001  # cfg.TRAIN.BASE_LEARNING_RATE
 
-    G_optimizer = optim.Adam(G.parameters(), lr=lr, betas=(0.5, 0.999))
-    D_optimizer = optim.Adam(D.parameters(), lr=lr, betas=(0.5, 0.999))
-    GE_optimizer = optim.Adam(list(E.parameters()) + list(G.parameters()), lr=lr, betas=(0.5, 0.999))
-    ZD_optimizer = optim.Adam(ZD.parameters(), lr=lr, betas=(0.5, 0.999))
+    G_optimizer = Adam(G.parameters(), lr=lr)
+    D_optimizer = Adam(D.parameters(), lr=lr)
+    GE_optimizer = Adam(list(E.parameters()) + list(G.parameters()), lr=lr)
+    ZD_optimizer = Adam(ZD.parameters())
 
-    BCE_loss = nn.BCELoss()
-    sample = torch.randn(64, zsize).view(-1, zsize, 1, 1)
+    sample = torch.randn(1024, zsize).view(-1, zsize)
 
     tracker = LossTracker(output_folder=output_folder)
+
+    BCE_loss = nn.BCELoss()
 
     for epoch in range(cfg.TRAIN.EPOCH_COUNT):
         G.train()
@@ -89,29 +122,21 @@ def train(folding_id, inliner_classes, ic):
             print("learning rate change!")
 
         for y, x in data_loader:
-            x = x.view(-1, cfg.MODEL.INPUT_IMAGE_CHANNELS, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE)
-
-            y_real_ = torch.ones(x.shape[0])
-            y_fake_ = torch.zeros(x.shape[0])
-
-            y_real_z = torch.ones(1 if cfg.MODEL.Z_DISCRIMINATOR_CROSS_BATCH else x.shape[0])
-            y_fake_z = torch.zeros(1 if cfg.MODEL.Z_DISCRIMINATOR_CROSS_BATCH else x.shape[0])
+            x = x.view(-1, cfg.MODEL.INPUT_IMAGE_CHANNELS)
 
             #############################################
 
             D.zero_grad()
 
-            D_result = D(x).squeeze()
-            D_real_loss = BCE_loss(D_result, y_real_)
+            D_result_real = D(x).squeeze()
 
-            z = torch.randn((x.shape[0], zsize)).view(-1, zsize, 1, 1)
+            z = torch.randn((x.shape[0], zsize)).view(-1, zsize)
             z = Variable(z)
 
             x_fake = G(z).detach()
-            D_result = D(x_fake).squeeze()
-            D_fake_loss = BCE_loss(D_result, y_fake_)
+            D_result_fake = D(x_fake).squeeze()
 
-            D_train_loss = D_real_loss + D_fake_loss
+            D_train_loss = discriminator_logistic_simple_gp(D_result_fake, D_result_real, x)
             D_train_loss.backward()
 
             D_optimizer.step()
@@ -123,13 +148,13 @@ def train(folding_id, inliner_classes, ic):
 
             G.zero_grad()
 
-            z = torch.randn((x.shape[0], zsize)).view(-1, zsize, 1, 1)
+            z = torch.randn((x.shape[0], zsize)).view(-1, zsize)
             z = Variable(z)
 
             x_fake = G(z)
-            D_result = D(x_fake).squeeze()
+            D_result_fake = D(x_fake).squeeze()
 
-            G_train_loss = BCE_loss(D_result, y_real_)
+            G_train_loss = generator_logistic_non_saturating(D_result_fake)
 
             G_train_loss.backward()
             G_optimizer.step()
@@ -141,17 +166,14 @@ def train(folding_id, inliner_classes, ic):
             ZD.zero_grad()
 
             z = torch.randn((x.shape[0], zsize)).view(-1, zsize)
-            z = Variable(z)
+            z = z.requires_grad_(True)
 
-            ZD_result = ZD(z).squeeze()
-            ZD_real_loss = BCE_loss(ZD_result, y_real_z)
+            D_result_real = ZD(z).squeeze()
 
-            z = E(x).squeeze().detach()
+            D_result_fake = ZD(E(x).squeeze().detach()).squeeze()
 
-            ZD_result = ZD(z).squeeze()
-            ZD_fake_loss = BCE_loss(ZD_result, y_fake_z)
+            ZD_train_loss = discriminator_logistic_simple_gp(D_result_fake, D_result_real, z, 0.0)
 
-            ZD_train_loss = ZD_real_loss + ZD_fake_loss
             ZD_train_loss.backward()
 
             ZD_optimizer.step()
@@ -166,11 +188,10 @@ def train(folding_id, inliner_classes, ic):
             z = E(x)
             x_d = G(z)
 
-            ZD_result = ZD(z.squeeze()).squeeze()
+            ZD_result_fake = ZD(z.squeeze()).squeeze()
+            E_train_loss = generator_logistic_non_saturating(ZD_result_fake)
 
-            E_train_loss = BCE_loss(ZD_result, y_real_z) * 1.0
-
-            Recon_loss = F.binary_cross_entropy(x_d, x.detach()) * 2.0
+            Recon_loss = F.mse_loss(x_d, x.detach()) * 2.0
 
             (Recon_loss + E_train_loss).backward()
 
@@ -180,8 +201,8 @@ def train(folding_id, inliner_classes, ic):
 
             # #############################################
 
-        comparison = torch.cat([x, x_d])
-        save_image(comparison.cpu(), os.path.join(output_folder, 'reconstruction_' + str(epoch) + '.png'), nrow=x.shape[0])
+        # comparison = torch.cat([x, x_d])
+        # save_image(comparison.cpu(), os.path.join(output_folder, 'reconstruction_' + str(epoch) + '.png'), nrow=x.shape[0])
 
         epoch_end_time = time.time()
         per_epoch_ptime = epoch_end_time - epoch_start_time
@@ -193,10 +214,7 @@ def train(folding_id, inliner_classes, ic):
 
         with torch.no_grad():
             resultsample = G(sample).cpu()
-            save_image(resultsample.view(64,
-                                         cfg.MODEL.INPUT_IMAGE_CHANNELS,
-                                         cfg.MODEL.INPUT_IMAGE_SIZE,
-                                         cfg.MODEL.INPUT_IMAGE_SIZE),
+            save_image(resultsample,
                        os.path.join(output_folder, 'sample_' + str(epoch) + '.png'))
 
     logger.info("Training finish!... save training results")
@@ -204,9 +222,4 @@ def train(folding_id, inliner_classes, ic):
     os.makedirs("models", exist_ok=True)
 
     print("Training finish!... save training results")
-    torch.save(G.state_dict(), "models/Gmodel_%d_%d.pkl" %(folding_id, ic))
-    torch.save(E.state_dict(), "models/Emodel_%d_%d.pkl" %(folding_id, ic))
-    #torch.save(D.state_dict(), "Dmodel_%d_%d.pkl" %(folding_id, ic))
-    #torch.save(ZD.state_dict(), "ZDmodel_%d_%d.pkl" %(folding_id, ic))
-
-
+    torch.save([G.state_dict(), E.state_dict(), D.state_dict(), ZD.state_dict()], "models/model.pkl")

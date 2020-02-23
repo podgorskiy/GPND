@@ -15,71 +15,54 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
+#import lreq
+import torch.nn as lreq
 
 
 class Generator(nn.Module):
-    def __init__(self, z_size, d=128, channels=1):
+    def __init__(self, z_size, d=128, channels=2):
         super(Generator, self).__init__()
-        self.deconv1_1 = nn.ConvTranspose2d(z_size, d*2, 4, 1, 0)
-        self.deconv1_1_bn = nn.BatchNorm2d(d*2)
-        self.deconv2 = nn.ConvTranspose2d(d*2, d*2, 4, 2, 1)
-        self.deconv2_bn = nn.BatchNorm2d(d*2)
-        self.deconv3 = nn.ConvTranspose2d(d*2, d, 4, 2, 1)
-        self.deconv3_bn = nn.BatchNorm2d(d)
-        self.deconv4 = nn.ConvTranspose2d(d, channels, 4, 2, 1)
-
-    def weight_init(self, mean, std):
-        for m in self._modules:
-            normal_init(self._modules[m], mean, std)
+        self.layer1 = lreq.Linear(z_size, d)
+        self.layer2 = lreq.Linear(d, d * 2)
+        self.layer3 = lreq.Linear(d * 2, d * 4)
+        self.layer4 = lreq.Linear(d * 4, channels)
 
     def forward(self, x):
-        x = F.relu(self.deconv1_1_bn(self.deconv1_1(x)))
-        x = F.relu(self.deconv2_bn(self.deconv2(x)))
-        x = F.relu(self.deconv3_bn(self.deconv3(x)))
-        x = torch.tanh(self.deconv4(x)) * 0.5 + 0.5
+        x = F.leaky_relu(self.layer1(x), 0.2)
+        x = F.leaky_relu(self.layer2(x), 0.2)
+        x = F.leaky_relu(self.layer3(x), 0.2)
+        x = self.layer4(x)
         return x
 
 
 class Discriminator(nn.Module):
-    def __init__(self, d=128, channels=1):
+    def __init__(self, d=128, channels=2):
         super(Discriminator, self).__init__()
-        self.conv1_1 = nn.Conv2d(channels, d//2, 4, 2, 1)
-        self.conv2 = nn.Conv2d(d // 2, d*2, 4, 2, 1)
-        self.conv2_bn = nn.BatchNorm2d(d*2)
-        self.conv3 = nn.Conv2d(d*2, d*4, 4, 2, 1)
-        self.conv3_bn = nn.BatchNorm2d(d*4)
-        self.conv4 = nn.Conv2d(d * 4, 1, 4, 1, 0)
+        self.layer1 = lreq.Linear(channels, d)
+        self.layer2 = lreq.Linear(d, d * 2)
+        self.layer3 = lreq.Linear(d * 2, d * 4)
+        self.layer4 = lreq.Linear(d * 4, 1)
 
-    def weight_init(self, mean, std):
-        for m in self._modules:
-            normal_init(self._modules[m], mean, std)
-
-    def forward(self, input):
-        x = F.leaky_relu(self.conv1_1(input), 0.2)
-        x = F.leaky_relu(self.conv2_bn(self.conv2(x)), 0.2)
-        x = F.leaky_relu(self.conv3_bn(self.conv3(x)), 0.2)
-        x = torch.sigmoid(self.conv4(x))
+    def forward(self, x):
+        x = F.leaky_relu(self.layer1(x), 0.2)
+        x = F.leaky_relu(self.layer2(x), 0.2)
+        x = F.leaky_relu(self.layer3(x), 0.2)
+        x = self.layer4(x)
         return x
 
 
 class Encoder(nn.Module):
-    def __init__(self, z_size, d=128, channels=1):
+    def __init__(self, z_size, d=256, channels=2):
         super(Encoder, self).__init__()
-        self.conv1_1 = nn.Conv2d(channels, d, 4, 2, 1)
-        self.conv2 = nn.Conv2d(d, d*2, 4, 2, 1)
-        self.conv2_bn = nn.BatchNorm2d(d*2)
-        self.conv3 = nn.Conv2d(d*2, d*4, 4, 2, 1)
-        self.conv3_bn = nn.BatchNorm2d(d*4)
-        self.conv4 = nn.Conv2d(d * 4, z_size, 4, 1, 0)
+        self.conv1 = lreq.Linear(channels, d)
+        self.conv2 = lreq.Linear(d, d*2)
+        self.conv3 = lreq.Linear(d*2, d*4)
+        self.conv4 = lreq.Linear(d * 4, z_size)
 
-    def weight_init(self, mean, std):
-        for m in self._modules:
-            normal_init(self._modules[m], mean, std)
-
-    def forward(self, input):
-        x = F.leaky_relu(self.conv1_1(input), 0.2)
-        x = F.leaky_relu(self.conv2_bn(self.conv2(x)), 0.2)
-        x = F.leaky_relu(self.conv3_bn(self.conv3(x)), 0.2)
+    def forward(self, x):
+        x = F.leaky_relu(self.conv1(x), 0.2)
+        x = F.leaky_relu(self.conv2(x), 0.2)
+        x = F.leaky_relu(self.conv3(x), 0.2)
         x = self.conv4(x)
         return x
 
@@ -87,13 +70,9 @@ class Encoder(nn.Module):
 class ZDiscriminator(nn.Module):
     def __init__(self, z_size, batchSize, d=128):
         super(ZDiscriminator, self).__init__()
-        self.linear1 = nn.Linear(z_size, d)
-        self.linear2 = nn.Linear(d, d)
-        self.linear3 = nn.Linear(d, 1)
-
-    def weight_init(self, mean, std):
-        for m in self._modules:
-            normal_init(self._modules[m], mean, std)
+        self.linear1 = lreq.Linear(z_size, d)
+        self.linear2 = lreq.Linear(d, d)
+        self.linear3 = lreq.Linear(d, 1)
 
     def forward(self, x):
         x = F.leaky_relu((self.linear1(x)), 0.2)
@@ -105,18 +84,14 @@ class ZDiscriminator(nn.Module):
 class ZDiscriminator_mergebatch(nn.Module):
     def __init__(self, z_size, batchSize, d=128):
         super(ZDiscriminator_mergebatch, self).__init__()
-        self.linear1 = nn.Linear(z_size, d)
-        self.linear2 = nn.Linear(d * batchSize, d)
-        self.linear3 = nn.Linear(d, 1)
-
-    def weight_init(self, mean, std):
-        for m in self._modules:
-            normal_init(self._modules[m], mean, std)
+        self.linear1 = lreq.Linear(z_size, d)
+        self.linear2 = lreq.Linear(d * batchSize, d)
+        self.linear3 = lreq.Linear(d, 1)
 
     def forward(self, x):
         x = F.leaky_relu((self.linear1(x)), 0.2).view(1, -1) # after the second layer all samples are concatenated
         x = F.leaky_relu((self.linear2(x)), 0.2)
-        x = torch.sigmoid(self.linear3(x))
+        x = self.linear3(x)
         return x
 
 

@@ -12,7 +12,7 @@ def get_f1(true_positive, false_positive, false_negative):
     return 2.0 * precision * recall / (precision + recall)
 
 
-def evaluate(logger, percentage_of_outliers, inliner_classes, prediction, threshold, gt_inlier):
+def evaluate(logger, percentage_of_outliers, prediction, threshold, gt_inlier):
     y = np.greater(prediction, threshold)
 
     gt_outlier = np.logical_not(gt_inlier)
@@ -122,7 +122,7 @@ def evaluate(logger, percentage_of_outliers, inliner_classes, prediction, thresh
             "Class: %s\n Percentage: %d\n"
             "Error: %f\n F1: %f\n AUC: %f\nfpr95: %f"
             "\nDetection: %f\nauprin: %f\nauprout: %f\n\n" %
-            ("_".join([str(x) for x in inliner_classes]), percentage_of_outliers, error, f1, auc, fpr95, error, auprin, auprout))
+            ("_", percentage_of_outliers, error, f1, auc, fpr95, error, auprin, auprout))
 
     return dict(auc=auc, f1=f1, fpr95=fpr95, error=error, auprin=auprin, auprout=auprout)
     # return auc, f1, fpr95, error, auprin, auprout

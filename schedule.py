@@ -1,6 +1,7 @@
 from save_to_csv import save_results
 import logging
 import sys
+import torch
 import utils.multiprocessing
 
 
@@ -15,32 +16,26 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 
-mul = 0.2
-
-settings = []
-
-classes_count = 10
-
-for fold in range(5 if full_run else 1):
-    for i in range(classes_count):
-        settings.append(dict(fold=fold, digit=i))
+mul = 1.0
 
 
-def f(setting):
+def run():
     import train_AAE
     import novelty_detector
 
-    fold_id = setting['fold']
-    inliner_classes = setting['digit']
+    # train_AAE.train()
 
-    train_AAE.train(fold_id, [inliner_classes], inliner_classes)
-
-    res = novelty_detector.main(fold_id, [inliner_classes], inliner_classes, classes_count, mul)
-    return res
+    novelty_detector.main(mul)
+    # return res
 
 
-gpu_count = utils.multiprocessing.get_gpu_count()
+torch.set_default_tensor_type('torch.cuda.FloatTensor')
+torch.cuda.set_device(0)
+device = torch.cuda.current_device()
+print("Running on GPU: %d, %s" % (0, torch.cuda.get_device_name(device)))
 
-results = utils.multiprocessing.map(f, gpu_count, settings)
 
-save_results(results, "results.csv")
+run()
+
+
+# save_results(results, "results.csv")
