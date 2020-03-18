@@ -36,6 +36,9 @@ _C.TEST.BATCH_SIZE = 1024
 
 _C.MAKE_PLOTS = True
 
+_C.OUTPUT_FOLDER = 'results'
+_C.RESULTS_NAME = 'results.csv'
+
 
 def get_cfg_defaults():
     """Get a yacs CfgNode object with default values for my_project."""

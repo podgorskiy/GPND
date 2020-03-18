@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import torch.utils.data
-from defaults import get_cfg_defaults
 from torch import optim
 from torchvision.utils import save_image
 from torch.autograd import Variable
@@ -68,14 +67,13 @@ def make_losses(cfg):
         return discriminator_classic, generator_classic, reconstruction_bce
 
 
-def train(folding_id, inliner_classes, ic, cfg_file):
-    cfg = get_cfg_defaults()
-    cfg.merge_from_file(cfg_file)
-    cfg.freeze()
+def train(folding_id, inliner_classes, ic, cfg):
     logger = logging.getLogger("logger")
 
     zsize = cfg.MODEL.LATENT_SIZE
     output_folder = os.path.join('results_' + str(folding_id) + "_" + "_".join([str(x) for x in inliner_classes]))
+    output_folder = os.path.join(cfg.OUTPUT_FOLDER, output_folder)
+
     os.makedirs(output_folder, exist_ok=True)
     os.makedirs('models', exist_ok=True)
 
@@ -233,8 +231,8 @@ def train(folding_id, inliner_classes, ic, cfg_file):
     os.makedirs("models", exist_ok=True)
 
     print("Training finish!... save training results")
-    torch.save(G.state_dict(), "models/Gmodel_%d_%d.pkl" %(folding_id, ic))
-    torch.save(E.state_dict(), "models/Emodel_%d_%d.pkl" %(folding_id, ic))
+    torch.save(G.state_dict(), os.path.join(output_folder, "models/Gmodel_%d_%d.pkl" %(folding_id, ic)))
+    torch.save(E.state_dict(), os.path.join(output_folder, "models/Emodel_%d_%d.pkl" %(folding_id, ic)))
     #torch.save(D.state_dict(), "Dmodel_%d_%d.pkl" %(folding_id, ic))
     #torch.save(ZD.state_dict(), "ZDmodel_%d_%d.pkl" %(folding_id, ic))
 

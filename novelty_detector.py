@@ -101,11 +101,7 @@ def extract_statistics(cfg, train_set, inliner_classes, E, G):
     return counts, bin_edges, gennorm_param
 
 
-def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
-    cfg = get_cfg_defaults()
-    cfg.merge_from_file('configs/mnist.yaml')
-    cfg.freeze()
-
+def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None):
     logger = logging.getLogger("logger")
 
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
@@ -242,7 +238,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
             threshold, alpha = x
             return -evaluate(threshold, alpha)
 
-        res = minimize(func, [0, 0.2], method='Nelder-Mead', options={
+        res = minimize(func, [0.0, 0.2], method='Nelder-Mead', options={
             'disp': True,
             'maxiter': None,
             'xatol': 0.01,

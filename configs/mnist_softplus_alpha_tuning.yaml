@@ -16,3 +16,5 @@ TRAIN:
   BATCH_SIZE: 128
   EPOCH_COUNT: 80
 
+OUTPUT_FOLDER: 'results_softplus'
+RESULTS_NAME: 'results_alpha_tuning.csv'
