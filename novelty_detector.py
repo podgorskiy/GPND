@@ -33,6 +33,7 @@ import scipy.stats
 from scipy.special import loggamma
 from timeit import default_timer as timer
 from scipy.optimize import minimize
+import os
 
 
 def r_pdf(x, bins, counts):
@@ -76,7 +77,7 @@ def extract_statistics(cfg, train_set, inliner_classes, E, G):
         save_plot(r"Distance, $\left \|\| I - \hat{I} \right \|\|$",
                   'Probability density',
                   r"PDF of distance for reconstruction error, $p\left(\left \|\| I - \hat{I} \right \|\| \right)$",
-                  'mnist_%s_reconstruction_error.pdf' % ("_".join([str(x) for x in inliner_classes])))
+                  cfg.OUTPUT_FOLDER + '/mnist_%s_reconstruction_error.pdf' % ("_".join([str(x) for x in inliner_classes])))
 
     for i in range(cfg.MODEL.LATENT_SIZE):
         plt.hist(zlist[:, i], bins='auto', histtype='step')
@@ -85,7 +86,7 @@ def extract_statistics(cfg, train_set, inliner_classes, E, G):
         save_plot(r"$z$",
                   'Probability density',
                   r"PDF of embeding $p\left(z \right)$",
-                  'mnist_%s_embedding.pdf' % ("_".join([str(x) for x in inliner_classes])))
+                  cfg.OUTPUT_FOLDER + '/mnist_%s_embedding.pdf' % ("_".join([str(x) for x in inliner_classes])))
 
     def fmin(func, x0, args, disp):
         x0 = [2.0, 0.0, 1.0]
@@ -118,8 +119,8 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
     G = Generator(cfg.MODEL.LATENT_SIZE, channels=cfg.MODEL.INPUT_IMAGE_CHANNELS)
     E = Encoder(cfg.MODEL.LATENT_SIZE, channels=cfg.MODEL.INPUT_IMAGE_CHANNELS)
 
-    G.load_state_dict(torch.load("models/Gmodel_%d_%d.pkl" %(folding_id, ic)))
-    E.load_state_dict(torch.load("models/Emodel_%d_%d.pkl" %(folding_id, ic)))
+    G.load_state_dict(torch.load(os.path.join(cfg.OUTPUT_FOLDER, "models/Gmodel_%d_%d.pkl" %(folding_id, ic))))
+    E.load_state_dict(torch.load(os.path.join(cfg.OUTPUT_FOLDER, "models/Emodel_%d_%d.pkl" %(folding_id, ic))))
 
     G.eval()
     E.eval()
@@ -129,9 +130,6 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
     save_image(sample.view(64, cfg.MODEL.INPUT_IMAGE_CHANNELS, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE), 'sample.png')
 
     counts, bin_edges, gennorm_param = extract_statistics(cfg, train_set, inliner_classes, E, G)
-
-    N = (cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE - cfg.MODEL.LATENT_SIZE)
-    logC = loggamma(N / 2.0) - (N / 2.0) * np.log(2.0 * np.pi)
 
     def run_novely_prediction_on_dataset(dataset, percentage, concervative=False):
         dataset.shuffle()

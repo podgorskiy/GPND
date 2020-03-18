@@ -34,7 +34,7 @@ def train(folding_id, inliner_classes, ic, cfg):
     output_folder = os.path.join(cfg.OUTPUT_FOLDER, output_folder)
 
     os.makedirs(output_folder, exist_ok=True)
-    os.makedirs('models', exist_ok=True)
+    os.makedirs(os.path.join(output_folder, 'models'), exist_ok=True)
 
     train_set, _, _ = make_datasets(cfg, folding_id, inliner_classes)
 
@@ -190,8 +190,8 @@ def train(folding_id, inliner_classes, ic, cfg):
     os.makedirs("models", exist_ok=True)
 
     print("Training finish!... save training results")
-    torch.save(G.state_dict(), os.path.join(output_folder, "models/Gmodel_%d_%d.pkl" %(folding_id, ic)))
-    torch.save(E.state_dict(), os.path.join(output_folder, "models/Emodel_%d_%d.pkl" %(folding_id, ic)))
+    torch.save(G.state_dict(), os.path.join(cfg.OUTPUT_FOLDER, "models/Gmodel_%d_%d.pkl" %(folding_id, ic)))
+    torch.save(E.state_dict(), os.path.join(cfg.OUTPUT_FOLDER, "models/Emodel_%d_%d.pkl" %(folding_id, ic)))
     #torch.save(D.state_dict(), "Dmodel_%d_%d.pkl" %(folding_id, ic))
     #torch.save(ZD.state_dict(), "ZDmodel_%d_%d.pkl" %(folding_id, ic))
 
