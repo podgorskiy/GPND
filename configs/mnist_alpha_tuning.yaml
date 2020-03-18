@@ -18,3 +18,5 @@ TRAIN:
 
 OUTPUT_FOLDER: 'results'
 RESULTS_NAME: 'results_alpha_tuning.csv'
+
+LOSSES: 'classic'

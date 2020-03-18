@@ -18,3 +18,5 @@ TRAIN:
 
 OUTPUT_FOLDER: 'results_softplus'
 RESULTS_NAME: 'results_alpha_tuning.csv'
+
+LOSSES: 'logistic_gp'

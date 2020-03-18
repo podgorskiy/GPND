@@ -62,7 +62,7 @@ class Discriminator(nn.Module):
         x = F.leaky_relu(self.conv1_1(input), 0.2)
         x = F.leaky_relu(self.conv2_bn(self.conv2(x)), 0.2)
         x = F.leaky_relu(self.conv3_bn(self.conv3(x)), 0.2)
-        x = torch.sigmoid(self.conv4(x))
+        x = self.conv4(x)
         return x
 
 
@@ -102,7 +102,7 @@ class ZDiscriminator(nn.Module):
     def forward(self, x):
         x = F.leaky_relu((self.linear1(x)), 0.2)
         x = F.leaky_relu((self.linear2(x)), 0.2)
-        x = torch.sigmoid(self.linear3(x))
+        x = self.linear3(x)
         return x
 
 
@@ -118,9 +118,9 @@ class ZDiscriminator_mergebatch(nn.Module):
             normal_init(self._modules[m], mean, std)
 
     def forward(self, x):
-        x = F.leaky_relu((self.linear1(x)), 0.2).view(1, -1) # after the second layer all samples are concatenated
+        x = F.leaky_relu((self.linear1(x)), 0.2).view(1, -1)  # after the second layer all samples are concatenated
         x = F.leaky_relu((self.linear2(x)), 0.2)
-        x = torch.sigmoid(self.linear3(x))
+        x = self.linear3(x)
         return x
 
 

@@ -38,7 +38,7 @@ _C.MAKE_PLOTS = True
 
 _C.OUTPUT_FOLDER = 'results'
 _C.RESULTS_NAME = 'results.csv'
-
+_C.LOSSES = 'classic'
 
 def get_cfg_defaults():
     """Get a yacs CfgNode object with default values for my_project."""
