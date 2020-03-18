@@ -14,6 +14,10 @@ formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s")
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
+if len(sys.argv) > 1:
+    cfg_file = 'configs/' + sys.argv[1]
+else:
+    cfg_file = 'configs/' + input("Config file:")
 
 mul = 0.25
 
@@ -33,14 +37,14 @@ def f(setting):
     fold_id = setting['fold']
     inliner_classes = setting['digit']
 
-    train_AAE.train(fold_id, [inliner_classes], inliner_classes)
+    train_AAE.train(fold_id, [inliner_classes], inliner_classes, cfg_file=cfg_file)
 
-    res = novelty_detector.main(fold_id, [inliner_classes], inliner_classes, classes_count, mul)
+    res = novelty_detector.main(fold_id, [inliner_classes], inliner_classes, classes_count, mul, cfg_file=cfg_file)
     return res
 
 
-gpu_count = utils.multiprocessing.get_gpu_count()
+gpu_count = min(utils.multiprocessing.get_gpu_count(), 6)
 
 results = utils.multiprocessing.map(f, gpu_count, settings)
 
-save_results(results, "results_new3.csv")
+save_results(results, "results.csv")

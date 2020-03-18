@@ -28,9 +28,49 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def train(folding_id, inliner_classes, ic):
+def discriminator_logistic_simple_gp(d_result_fake, d_result_real, reals, r1_gamma=2.0):
+    loss = (F.softplus(d_result_fake) + F.softplus(-d_result_real))
+
+    if r1_gamma != 0.0:
+        real_loss = d_result_real.sum()
+        real_grads = torch.autograd.grad(real_loss, reals, create_graph=True, retain_graph=True)[0]
+        r1_penalty = torch.sum(real_grads.pow(2.0), dim=[1, 2, 3])
+        loss = loss + r1_penalty * (r1_gamma * 0.5)
+    return loss.mean()
+
+
+def generator_logistic_non_saturating(d_result_fake):
+    return F.softplus(-d_result_fake).mean()
+
+
+def reconstruction_mse(x, target):
+    return F.mse_loss(x, target.detach())
+
+
+def discriminator_classic(d_result_fake, d_result_real, reals, r1_gamma=2.0):
+    return F.binary_cross_entropy_with_logits(d_result_fake, torch.zeros_like(d_result_fake)) +\
+           F.binary_cross_entropy_with_logits(d_result_real, torch.ones_like(d_result_real))
+
+
+def generator_classic(d_result_fake):
+    return F.binary_cross_entropy_with_logits(d_result_fake, torch.ones_like(d_result_fake))
+
+
+def reconstruction_bce(x, target):
+    return F.binary_cross_entropy(x, target.detach()) * 2.0
+
+
+def make_losses(cfg):
+    if cfg.LOSSES == 'logistic_gp':
+        return discriminator_logistic_simple_gp, generator_logistic_non_saturating, reconstruction_mse
+
+    elif cfg.LOSSES == 'classic':
+        return discriminator_classic, generator_classic, reconstruction_bce
+
+
+def train(folding_id, inliner_classes, ic, cfg_file):
     cfg = get_cfg_defaults()
-    cfg.merge_from_file('configs/mnist.yaml')
+    cfg.merge_from_file(cfg_file)
     cfg.freeze()
     logger = logging.getLogger("logger")
 
@@ -43,7 +83,7 @@ def train(folding_id, inliner_classes, ic):
 
     logger.info("Train set size: %d" % len(train_set))
 
-    G = Generator(cfg.MODEL.LATENT_SIZE, channels=cfg.MODEL.INPUT_IMAGE_CHANNELS)
+    G = Generator(cfg.MODEL.LATENT_SIZE, channels=cfg.MODEL.INPUT_IMAGE_CHANNELS, no_tanh=cfg.LOSSES == 'logistic_gp')
     G.weight_init(mean=0, std=0.02)
 
     D = Discriminator(channels=cfg.MODEL.INPUT_IMAGE_CHANNELS)
@@ -65,7 +105,8 @@ def train(folding_id, inliner_classes, ic):
     GE_optimizer = optim.Adam(list(E.parameters()) + list(G.parameters()), lr=lr, betas=(0.5, 0.999))
     ZD_optimizer = optim.Adam(ZD.parameters(), lr=lr, betas=(0.5, 0.999))
 
-    BCE_loss = nn.BCELoss()
+    discriminator_loss, generator_loss, reconstruction_loss = make_losses(cfg)
+
     sample = torch.randn(64, zsize).view(-1, zsize, 1, 1)
 
     tracker = LossTracker(output_folder=output_folder)
@@ -91,27 +132,19 @@ def train(folding_id, inliner_classes, ic):
         for y, x in data_loader:
             x = x.view(-1, cfg.MODEL.INPUT_IMAGE_CHANNELS, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE)
 
-            y_real_ = torch.ones(x.shape[0])
-            y_fake_ = torch.zeros(x.shape[0])
-
-            y_real_z = torch.ones(1 if cfg.MODEL.Z_DISCRIMINATOR_CROSS_BATCH else x.shape[0])
-            y_fake_z = torch.zeros(1 if cfg.MODEL.Z_DISCRIMINATOR_CROSS_BATCH else x.shape[0])
-
             #############################################
 
             D.zero_grad()
 
-            D_result = D(x).squeeze()
-            D_real_loss = BCE_loss(D_result, y_real_)
+            D_result_real = D(x).squeeze()
 
             z = torch.randn((x.shape[0], zsize)).view(-1, zsize, 1, 1)
             z = Variable(z)
 
             x_fake = G(z).detach()
-            D_result = D(x_fake).squeeze()
-            D_fake_loss = BCE_loss(D_result, y_fake_)
+            D_result_fake = D(x_fake).squeeze()
 
-            D_train_loss = D_real_loss + D_fake_loss
+            D_train_loss = discriminator_loss(D_result_fake, D_result_real, x)
             D_train_loss.backward()
 
             D_optimizer.step()
@@ -127,9 +160,9 @@ def train(folding_id, inliner_classes, ic):
             z = Variable(z)
 
             x_fake = G(z)
-            D_result = D(x_fake).squeeze()
+            D_result_fake = D(x_fake).squeeze()
 
-            G_train_loss = BCE_loss(D_result, y_real_)
+            G_train_loss = generator_loss(D_result_fake)
 
             G_train_loss.backward()
             G_optimizer.step()
@@ -141,17 +174,14 @@ def train(folding_id, inliner_classes, ic):
             ZD.zero_grad()
 
             z = torch.randn((x.shape[0], zsize)).view(-1, zsize)
-            z = Variable(z)
+            z = z.requires_grad_(True)
 
-            ZD_result = ZD(z).squeeze()
-            ZD_real_loss = BCE_loss(ZD_result, y_real_z)
+            D_result_real = ZD(z).squeeze()
 
-            z = E(x).squeeze().detach()
+            D_result_fake = ZD(E(x).squeeze().detach()).squeeze()
 
-            ZD_result = ZD(z).squeeze()
-            ZD_fake_loss = BCE_loss(ZD_result, y_fake_z)
+            ZD_train_loss = discriminator_logistic_simple_gp(D_result_fake, D_result_real, z, 0.0)
 
-            ZD_train_loss = ZD_real_loss + ZD_fake_loss
             ZD_train_loss.backward()
 
             ZD_optimizer.step()
@@ -166,11 +196,10 @@ def train(folding_id, inliner_classes, ic):
             z = E(x)
             x_d = G(z)
 
-            ZD_result = ZD(z.squeeze()).squeeze()
+            ZD_result_fake = ZD(z.squeeze()).squeeze()
+            E_train_loss = generator_loss(ZD_result_fake)
 
-            E_train_loss = BCE_loss(ZD_result, y_real_z) * 1.0
-
-            Recon_loss = F.binary_cross_entropy(x_d, x.detach()) * 2.0
+            Recon_loss = reconstruction_loss(x_d, x) * 2.0
 
             (Recon_loss + E_train_loss).backward()
 

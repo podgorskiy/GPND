@@ -18,7 +18,7 @@ from torch.nn import functional as F
 
 
 class Generator(nn.Module):
-    def __init__(self, z_size, d=128, channels=1):
+    def __init__(self, z_size, d=128, channels=1, no_tanh=False):
         super(Generator, self).__init__()
         self.deconv1_1 = nn.ConvTranspose2d(z_size, d*2, 4, 1, 0)
         self.deconv1_1_bn = nn.BatchNorm2d(d*2)
@@ -27,6 +27,7 @@ class Generator(nn.Module):
         self.deconv3 = nn.ConvTranspose2d(d*2, d, 4, 2, 1)
         self.deconv3_bn = nn.BatchNorm2d(d)
         self.deconv4 = nn.ConvTranspose2d(d, channels, 4, 2, 1)
+        self.no_tanh = no_tanh
 
     def weight_init(self, mean, std):
         for m in self._modules:
@@ -36,7 +37,10 @@ class Generator(nn.Module):
         x = F.relu(self.deconv1_1_bn(self.deconv1_1(x)))
         x = F.relu(self.deconv2_bn(self.deconv2(x)))
         x = F.relu(self.deconv3_bn(self.deconv3(x)))
-        x = torch.tanh(self.deconv4(x)) * 0.5 + 0.5
+        if self.no_tanh:
+            x = self.deconv4(x)
+        else:
+            x = torch.tanh(self.deconv4(x)) * 0.5 + 0.5
         return x
 
 

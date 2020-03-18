@@ -32,6 +32,7 @@ import matplotlib.pyplot as plt
 import scipy.stats
 from scipy.special import loggamma
 from timeit import default_timer as timer
+from scipy.optimize import minimize
 
 
 def r_pdf(x, bins, counts):
@@ -133,6 +134,9 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
     counts, bin_edges, gennorm_param = extract_statistics(cfg, train_set, inliner_classes, E, G)
 
+    N = (cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE - cfg.MODEL.LATENT_SIZE)
+    logC = loggamma(N / 2.0) - (N / 2.0) * np.log(2.0 * np.pi)
+
     def run_novely_prediction_on_dataset(dataset, percentage, concervative=False):
         dataset.shuffle()
         dataset = create_set_with_outlier_percentage(dataset, inliner_classes, percentage, concervative)
@@ -144,13 +148,13 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
         include_jacobian = True
 
-        N = (cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE - cfg.MODEL.LATENT_SIZE) * mul
+        N = cfg.MODEL.INPUT_IMAGE_CHANNELS * cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE - cfg.MODEL.LATENT_SIZE
         logC = loggamma(N / 2.0) - (N / 2.0) * np.log(2.0 * np.pi)
 
         def logPe_func(x):
             # p_{\|W^{\perp}\|} (\|w^{\perp}\|)
             # \| w^{\perp} \|}^{m-n}
-            return logC - (N - 1) * np.log(x) + np.log(r_pdf(x, bin_edges, counts))
+            return logC - (N - 1) * np.log(x), np.log(r_pdf(x, bin_edges, counts))
 
         for label, x in data_loader:
             x = x.view(-1, cfg.MODEL.INPUT_IMAGE_CHANNELS * cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE)
@@ -161,8 +165,28 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
             z = z.squeeze()
 
             if include_jacobian:
-                J = compute_jacobian(x, z)
-                J = J.cpu().numpy()
+                # J = compute_jacobian(x, z)
+                # J = J.cpu().numpy()
+
+                with torch.no_grad():
+                    J = torch.zeros(cfg.MODEL.LATENT_SIZE, x.shape[0], N, requires_grad=False)
+                    J += recon_batch.view(1, -1, N)
+
+                    epsilon = 1e-3
+                    for i in range(cfg.MODEL.LATENT_SIZE):
+                        z_onehot = np.zeros([1, cfg.MODEL.LATENT_SIZE], dtype=np.float32)
+                        z_onehot[0, i] = epsilon
+                        z_onehot = torch.tensor(z_onehot, dtype=torch.float32)
+                        _z = z + z_onehot
+                        d_recon_batch = G(_z.view(-1, cfg.MODEL.LATENT_SIZE, 1, 1))
+                        J[i] -= d_recon_batch.view(-1, N)
+
+                    J /= epsilon
+
+                    J = torch.transpose(J, dim0=0, dim1=1)
+                    J = torch.transpose(J, dim0=1, dim1=2)
+
+                    J = J.cpu().numpy()
 
             z = z.cpu().detach().numpy()
 
@@ -172,7 +196,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
             for i in range(x.shape[0]):
                 if include_jacobian:
                     u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
-                    logD = -np.sum(np.log(np.abs(s)))  # | \mathrm{det} S^{-1} |
+                    logD = -np.sum(np.log(np.abs(1.0 / s)))  # | \mathrm{det} S^{-1} |
                     # logD = np.log(np.abs(1.0/(np.prod(s))))
                 else:
                     logD = 0
@@ -188,49 +212,68 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5):
 
                 distance = np.linalg.norm(x[i].flatten() - recon_batch[i].flatten())
 
-                logPe = logPe_func(distance)
+                logPe_p1, logPe_p2 = logPe_func(distance)
 
-                P = logD + logPz + logPe
-
-                result.append(P)
+                result.append((logD, logPz, logPe_p1, logPe_p2))
                 gt_novel.append(label[i].item() in inliner_classes)
 
         result = np.asarray(result, dtype=np.float32)
         ground_truth = np.asarray(gt_novel, dtype=np.float32)
         return result, ground_truth
 
-    def compute_threshold(valid_set, percentage):
-        y_scores, y_true = run_novely_prediction_on_dataset(valid_set, percentage, concervative=True)
+    def compute_threshold_coeffs(valid_set, percentage):
+        y_scores_components, y_true = run_novely_prediction_on_dataset(valid_set, percentage, concervative=True)
 
-        minP = min(y_scores) - 1
-        maxP = max(y_scores) + 1
-        y_false = np.logical_not(y_true)
+        y_scores_components = np.asarray(y_scores_components, dtype=np.float32)
 
-        def evaluate(e):
+        def evaluate(threshold, alpha):
+            coeff = np.asarray([[1, 1, alpha, 1]], dtype=np.float32)
+            y_scores = (y_scores_components * coeff).mean(axis=1)
+
+            y_false = np.logical_not(y_true)
+
             y = np.greater(y_scores, e)
             true_positive = np.sum(np.logical_and(y, y_true))
             false_positive = np.sum(np.logical_and(y, y_false))
             false_negative = np.sum(np.logical_and(np.logical_not(y), y_true))
             return get_f1(true_positive, false_positive, false_negative)
 
-        best_th, best_f1 = find_maximum(evaluate, minP, maxP, 1e-4)
+        def func(x):
+            threshold, alpha = x
+            return -evaluate(threshold, alpha)
 
-        logger.info("Best e: %f best f1: %f" % (best_th, best_f1))
-        return best_th
+        res = minimize(func, [0, 0.2], method='Nelder-Mead', options={
+            'disp': True,
+            'maxiter': None,
+            'xatol': 0.01,
+            'fatol': 0.0001,
+            'maxfev': 10000
+        })
 
-    def test(test_set, percentage, threshold):
-        y_scores, y_true = run_novely_prediction_on_dataset(test_set, percentage, concervative=True)
+        threshold, alpha = res.x
+
+        best_f1 = evaluate(threshold, alpha)
+
+        logger.info("Best e: %f Best a: %f best f1: %f" % (threshold, alpha, best_f1))
+        return alpha, threshold
+
+    def test(test_set, percentage, threshold, alpha):
+        y_scores_components, y_true = run_novely_prediction_on_dataset(test_set, percentage, concervative=True)
+        y_scores_components = np.asarray(y_scores_components, dtype=np.float32)
+        coeff = np.asarray([[1, 1, alpha, 1]], dtype=np.float32)
+        y_scores = (y_scores_components * coeff).mean(axis=1)
+
         return evaluate(logger, percentage, inliner_classes, y_scores, threshold, y_true)
 
-    percentages = cfg.DATASET.PERCENTAGES
-    # percentages = [50]
+    # percentages = cfg.DATASET.PERCENTAGES
+    percentages = [50]
 
     results = {}
 
     for p in percentages:
         plt.figure(num=None, figsize=(8, 6), dpi=180, facecolor='w', edgecolor='k')
-        e = compute_threshold(valid_set, p)
-        results[p] = test(test_set, p, e)
+        a, e = compute_threshold_coeffs(valid_set, p)
+        results[p] = test(test_set, p, e, a)
 
     return results
 
