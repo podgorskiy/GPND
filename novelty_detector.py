@@ -191,7 +191,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
             for i in range(x.shape[0]):
                 if include_jacobian:
                     u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
-                    logD = np.sum(np.log(np.abs(1.0 / s)))  # | \mathrm{det} S^{-1} |
+                    logD = -np.sum(np.log(np.abs(1.0 / s)))  # | \mathrm{det} S^{-1} |
                     # logD = np.log(np.abs(1.0/(np.prod(s))))
                 else:
                     logD = 0
@@ -221,8 +221,13 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
 
         y_scores_components = np.asarray(y_scores_components, dtype=np.float32)
 
-        def evaluate(threshold, alpha):
-            coeff = np.asarray([[1, 1, alpha, 1]], dtype=np.float32)
+        def evaluate(threshold, phase_threshold, alpha):
+            coeff_a = np.asarray([[1, 1, alpha, 1]], dtype=np.float32)
+            coeff_b = np.asarray([[0, 0, alpha, 1]], dtype=np.float32)
+            mask = y_scores_components[:, 2:3] < phase_threshold
+
+            coeff = np.where(mask, coeff_a, coeff_b)
+
             y_scores = (y_scores_components * coeff).mean(axis=1)
 
             y_false = np.logical_not(y_true)
@@ -234,25 +239,26 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
             return get_f1(true_positive, false_positive, false_negative)
 
         def func(x):
-            threshold, alpha = x
-            return -evaluate(threshold, alpha)
+            threshold, phase_threshold, alpha = x
+            return -evaluate(threshold, phase_threshold, alpha)
 
         # Find initial threshold guess
         def eval(th):
-            return evaluate(th, 0.2)
+            return evaluate(th, 0.0, 0.2)
         best_th, best_f1 = find_maximum(eval, -1000, 1000, 1e-2)
         logger.info("Initial e: %f best f1: %f" % (best_th, best_f1))
 
         res = dual_annealing(func, [
             [best_th - 100.0, best_th + 100.0],
+            [best_th - 100.0, best_th + 100.0],
             [0.0, 1.0]
         ], maxiter=10000)
 
-        threshold, alpha = res.x
+        threshold, phase_threshold, alpha = res.x
 
-        best_f1 = evaluate(threshold, alpha)
+        best_f1 = evaluate(threshold, phase_threshold, alpha)
 
-        logger.info("Best e: %f Best a: %f best f1: %f" % (threshold, alpha, best_f1))
+        logger.info("Best e: %f Best phase e: %f Best a: %f best f1: %f" % (threshold, phase_threshold, alpha, best_f1))
         return alpha, threshold
 
     def test(test_set, percentage, threshold, alpha):
