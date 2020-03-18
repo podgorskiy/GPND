@@ -34,7 +34,7 @@ def train(folding_id, inliner_classes, ic, cfg):
     output_folder = os.path.join(cfg.OUTPUT_FOLDER, output_folder)
 
     os.makedirs(output_folder, exist_ok=True)
-    os.makedirs(os.path.join(output_folder, 'models'), exist_ok=True)
+    os.makedirs(os.path.join(cfg.OUTPUT_FOLDER, 'models'), exist_ok=True)
 
     train_set, _, _ = make_datasets(cfg, folding_id, inliner_classes)
 
