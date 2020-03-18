@@ -32,7 +32,7 @@ import matplotlib.pyplot as plt
 import scipy.stats
 from scipy.special import loggamma
 from timeit import default_timer as timer
-from scipy.optimize import minimize
+from scipy.optimize import minimize, dual_annealing
 import os
 
 
@@ -144,6 +144,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
 
         N = cfg.MODEL.INPUT_IMAGE_CHANNELS * cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE - cfg.MODEL.LATENT_SIZE
         logC = loggamma(N / 2.0) - (N / 2.0) * np.log(2.0 * np.pi)
+        inout_n = cfg.MODEL.INPUT_IMAGE_CHANNELS * cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE
 
         def logPe_func(x):
             # p_{\|W^{\perp}\|} (\|w^{\perp}\|)
@@ -163,8 +164,8 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
                 # J = J.cpu().numpy()
 
                 with torch.no_grad():
-                    J = torch.zeros(cfg.MODEL.LATENT_SIZE, x.shape[0], N, requires_grad=False)
-                    J += recon_batch.view(1, -1, N)
+                    J = torch.zeros(cfg.MODEL.LATENT_SIZE, x.shape[0], inout_n, requires_grad=False)
+                    J += recon_batch.view(1, -1, inout_n)
 
                     epsilon = 1e-3
                     for i in range(cfg.MODEL.LATENT_SIZE):
@@ -173,7 +174,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
                         z_onehot = torch.tensor(z_onehot, dtype=torch.float32)
                         _z = z + z_onehot
                         d_recon_batch = G(_z.view(-1, cfg.MODEL.LATENT_SIZE, 1, 1))
-                        J[i] -= d_recon_batch.view(-1, N)
+                        J[i] -= d_recon_batch.view(-1, inout_n)
 
                     J /= epsilon
 
@@ -190,7 +191,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
             for i in range(x.shape[0]):
                 if include_jacobian:
                     u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
-                    logD = -np.sum(np.log(np.abs(1.0 / s)))  # | \mathrm{det} S^{-1} |
+                    logD = np.sum(np.log(np.abs(1.0 / s)))  # | \mathrm{det} S^{-1} |
                     # logD = np.log(np.abs(1.0/(np.prod(s))))
                 else:
                     logD = 0
@@ -226,7 +227,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
 
             y_false = np.logical_not(y_true)
 
-            y = np.greater(y_scores, e)
+            y = np.greater(y_scores, threshold)
             true_positive = np.sum(np.logical_and(y, y_true))
             false_positive = np.sum(np.logical_and(y, y_false))
             false_negative = np.sum(np.logical_and(np.logical_not(y), y_true))
@@ -236,13 +237,16 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
             threshold, alpha = x
             return -evaluate(threshold, alpha)
 
-        res = minimize(func, [0.0, 0.2], method='Nelder-Mead', options={
-            'disp': True,
-            'maxiter': None,
-            'xatol': 0.01,
-            'fatol': 0.0001,
-            'maxfev': 10000
-        })
+        # Find initial threshold guess
+        def eval(th):
+            return evaluate(th, 0.2)
+        best_th, best_f1 = find_maximum(eval, -1000, 1000, 1e-2)
+        logger.info("Initial e: %f best f1: %f" % (best_th, best_f1))
+
+        res = dual_annealing(func, [
+            [best_th - 100.0, best_th + 100.0],
+            [0.0, 1.0]
+        ], maxiter=10000)
 
         threshold, alpha = res.x
 

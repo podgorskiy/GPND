@@ -42,7 +42,7 @@ def f(setting):
     fold_id = setting['fold']
     inliner_classes = setting['digit']
 
-    train_AAE.train(fold_id, [inliner_classes], inliner_classes, cfg=cfg)
+    # train_AAE.train(fold_id, [inliner_classes], inliner_classes, cfg=cfg)
 
     res = novelty_detector.main(fold_id, [inliner_classes], inliner_classes, classes_count, mul, cfg=cfg)
     return res

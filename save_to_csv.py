@@ -1,4 +1,5 @@
 import csv
+import numpy as np
 
 
 def save_results(results, filename):
@@ -18,5 +19,12 @@ def save_results(results, filename):
             for p in percentages:
                 row.append(r[p][m])
             writer.writerow(tuple(row))
+
     f.close()
 
+    mean_f1 = np.asarray([r[50]['f1'] for r in results]).mean()
+
+    f = open(filename[:-4] + "_%.3f" % mean_f1, 'w')
+    f.close()
+
+    print('Mean F1 at 50%%: %.3f' % mean_f1)
