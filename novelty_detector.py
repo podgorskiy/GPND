@@ -18,7 +18,7 @@ import torch.utils.data
 from torchvision.utils import save_image
 from net import *
 from torch.autograd import Variable
-from utils.jacobian import compute_jacobian
+from utils.jacobian import *
 import numpy as np
 import logging
 import scipy.optimize
@@ -144,7 +144,6 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
 
         N = cfg.MODEL.INPUT_IMAGE_CHANNELS * cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE - cfg.MODEL.LATENT_SIZE
         logC = loggamma(N / 2.0) - (N / 2.0) * np.log(2.0 * np.pi)
-        inout_n = cfg.MODEL.INPUT_IMAGE_CHANNELS * cfg.MODEL.INPUT_IMAGE_SIZE * cfg.MODEL.INPUT_IMAGE_SIZE
 
         def logPe_func(x):
             # p_{\|W^{\perp}\|} (\|w^{\perp}\|)
@@ -157,31 +156,13 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
 
             z = E(x.view(-1, cfg.MODEL.INPUT_IMAGE_CHANNELS, cfg.MODEL.INPUT_IMAGE_SIZE, cfg.MODEL.INPUT_IMAGE_SIZE))
             recon_batch = G(z)
-            z = z.squeeze()
 
             if include_jacobian:
                 # J = compute_jacobian(x, z)
-                # J = J.cpu().numpy()
+                J = compute_jacobian_using_finite_differences_v3(z, G)
+                J = J.cpu().numpy()
 
-                with torch.no_grad():
-                    J = torch.zeros(cfg.MODEL.LATENT_SIZE, x.shape[0], inout_n, requires_grad=False)
-                    J += recon_batch.view(1, -1, inout_n)
-
-                    epsilon = 1e-3
-                    for i in range(cfg.MODEL.LATENT_SIZE):
-                        z_onehot = np.zeros([1, cfg.MODEL.LATENT_SIZE], dtype=np.float32)
-                        z_onehot[0, i] = epsilon
-                        z_onehot = torch.tensor(z_onehot, dtype=torch.float32)
-                        _z = z + z_onehot
-                        d_recon_batch = G(_z.view(-1, cfg.MODEL.LATENT_SIZE, 1, 1))
-                        J[i] -= d_recon_batch.view(-1, inout_n)
-
-                    J /= epsilon
-
-                    J = torch.transpose(J, dim0=0, dim1=1)
-                    J = torch.transpose(J, dim0=1, dim1=2)
-
-                    J = J.cpu().numpy()
+            z = z.squeeze()
 
             z = z.cpu().detach().numpy()
 
@@ -191,7 +172,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
             for i in range(x.shape[0]):
                 if include_jacobian:
                     u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
-                    logD = -np.sum(np.log(np.abs(1.0 / s)))  # | \mathrm{det} S^{-1} |
+                    logD = np.sum(np.log(np.abs(1.0 / s)))  # | \mathrm{det} S^{-1} |
                     # logD = np.log(np.abs(1.0/(np.prod(s))))
                 else:
                     logD = 0
@@ -224,7 +205,7 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
         def evaluate(threshold, phase_threshold, alpha):
             coeff_a = np.asarray([[1, 1, alpha, 1]], dtype=np.float32)
             coeff_b = np.asarray([[0, 0, alpha, 1]], dtype=np.float32)
-            mask = y_scores_components[:, 2:3] < phase_threshold
+            mask = y_scores_components[:, 2:3] > phase_threshold
 
             coeff = np.where(mask, coeff_a, coeff_b)
 
@@ -252,19 +233,25 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
             [best_th - 100.0, best_th + 100.0],
             [best_th - 100.0, best_th + 100.0],
             [0.0, 1.0]
-        ], maxiter=10000)
+        ], maxiter=20000)
 
         threshold, phase_threshold, alpha = res.x
 
         best_f1 = evaluate(threshold, phase_threshold, alpha)
 
         logger.info("Best e: %f Best phase e: %f Best a: %f best f1: %f" % (threshold, phase_threshold, alpha, best_f1))
-        return alpha, threshold
+        return alpha, phase_threshold, threshold
 
-    def test(test_set, percentage, threshold, alpha):
+    def test(test_set, percentage, threshold, phase_threshold, alpha):
         y_scores_components, y_true = run_novely_prediction_on_dataset(test_set, percentage, concervative=True)
         y_scores_components = np.asarray(y_scores_components, dtype=np.float32)
-        coeff = np.asarray([[1, 1, alpha, 1]], dtype=np.float32)
+
+        coeff_a = np.asarray([[1, 1, alpha, 1]], dtype=np.float32)
+        coeff_b = np.asarray([[0, 0, alpha, 1]], dtype=np.float32)
+        mask = y_scores_components[:, 2:3] > phase_threshold
+
+        coeff = np.where(mask, coeff_a, coeff_b)
+
         y_scores = (y_scores_components * coeff).mean(axis=1)
 
         return evaluate(logger, percentage, inliner_classes, y_scores, threshold, y_true)
@@ -276,8 +263,8 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
 
     for p in percentages:
         plt.figure(num=None, figsize=(8, 6), dpi=180, facecolor='w', edgecolor='k')
-        a, e = compute_threshold_coeffs(valid_set, p)
-        results[p] = test(test_set, p, e, a)
+        a, phase_threshold, e = compute_threshold_coeffs(valid_set, p)
+        results[p] = test(test_set, p, e, phase_threshold, a)
 
     return results
 
