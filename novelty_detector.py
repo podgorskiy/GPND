@@ -202,13 +202,8 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
 
         y_scores_components = np.asarray(y_scores_components, dtype=np.float32)
 
-        def evaluate(threshold, phase_threshold, alpha):
-            coeff_a = np.asarray([[1, 1, alpha, 1]], dtype=np.float32)
-            coeff_b = np.asarray([[0, 0, alpha, 1]], dtype=np.float32)
-            mask = y_scores_components[:, 2:3] > phase_threshold
-
-            coeff = np.where(mask, coeff_a, coeff_b)
-
+        def evaluate(threshold, beta, alpha):
+            coeff = np.asarray([[1, beta, alpha, 1]], dtype=np.float32)
             y_scores = (y_scores_components * coeff).mean(axis=1)
 
             y_false = np.logical_not(y_true)
@@ -231,26 +226,22 @@ def main(folding_id, inliner_classes, ic, total_classes, mul, folds=5, cfg=None)
 
         res = dual_annealing(func, [
             [best_th - 100.0, best_th + 100.0],
-            [best_th - 100.0, best_th + 100.0],
+            [-5.0, 5.0],
             [0.0, 1.0]
         ], maxiter=20000)
 
-        threshold, phase_threshold, alpha = res.x
+        threshold, beta, alpha = res.x
 
-        best_f1 = evaluate(threshold, phase_threshold, alpha)
+        best_f1 = evaluate(threshold, beta, alpha)
 
-        logger.info("Best e: %f Best phase e: %f Best a: %f best f1: %f" % (threshold, phase_threshold, alpha, best_f1))
-        return alpha, phase_threshold, threshold
+        logger.info("Best e: %f Best beta: %f Best a: %f best f1: %f" % (threshold, beta, alpha, best_f1))
+        return alpha, beta, threshold
 
-    def test(test_set, percentage, threshold, phase_threshold, alpha):
+    def test(test_set, percentage, threshold, beta, alpha):
         y_scores_components, y_true = run_novely_prediction_on_dataset(test_set, percentage, concervative=True)
         y_scores_components = np.asarray(y_scores_components, dtype=np.float32)
 
-        coeff_a = np.asarray([[1, 1, alpha, 1]], dtype=np.float32)
-        coeff_b = np.asarray([[0, 0, alpha, 1]], dtype=np.float32)
-        mask = y_scores_components[:, 2:3] > phase_threshold
-
-        coeff = np.where(mask, coeff_a, coeff_b)
+        coeff = np.asarray([[1, beta, alpha, 1]], dtype=np.float32)
 
         y_scores = (y_scores_components * coeff).mean(axis=1)
 
