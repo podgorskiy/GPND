@@ -18,22 +18,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 import math
 from scipy.stats import multivariate_normal
+import scipy.stats as st
+import scipy.optimize
+import scipy.special
 
+sigma_gt = 1.0
+n_gt = 3
 
-mean = [0, 0]
-cov = [[1, 0], [0, 1]]  # diagonal covariance
+mean = np.zeros(n_gt)
+cov = np.eye(n_gt) * sigma_gt
 
-x, y = np.random.multivariate_normal(mean, cov, 10000).T
-plt.plot(x, y, 'x')
-plt.axis('equal')
-plt.show()
+samples = np.random.multivariate_normal(mean, cov, 10000)
 
 plt.figure(num=None, figsize=(14, 12), dpi=80, facecolor='w', edgecolor='k')
 
-r = np.stack([x, y], axis=1)
-print(r.shape)
+print(samples.shape)
 
-r_norm = np.linalg.norm(r, axis=1)
+r_norm = np.linalg.norm(samples, axis=1)
 counts, bins = np.histogram(r_norm, bins=100, normed=True)
 
 
@@ -52,21 +53,45 @@ x = np.linspace(0.0, 5.0, 10000)
 plt.plot(x, r_pdf(x))
 
 x = np.asarray(np.linspace(0.0, 5.0, 10000))
-x = np.stack([x, np.zeros(10000)], axis=1)
+x = np.stack([x] + [np.zeros(10000)] * (n_gt - 1), axis=1)
 var = multivariate_normal(mean, cov)
 plt.plot(x, var.pdf(x))
 
 
-def func(x):
-    n = 2
+def func(x, n):
     return math.gamma(n / 2.0) / (2.0 * np.pi ** (n / 2.0) * x ** (n - 1)) * _r_pdf(x)
 
 
-func = np.vectorize(func)
+class MVGN(st.rv_continuous):
+    def _pdf(self, x, n):
+        sigma = 1.0
+        return x ** (n - 1) / (2.0 ** (n / 2.0 - 1.0) * sigma * math.gamma(n / 2.0)) * np.exp(
+            - x ** 2 / sigma ** 2 / 2.0)
+
+    def _cdf(self, x, n):
+        s = 1.0
+        return 1.0 - s ** (n - 1) * scipy.special.gammaincc(n / 2.0, x ** 2 / s ** 2 / 2.0) / math.gamma(n / 2.0)
+
+
+mvgn = MVGN(a=0.0, b=np.inf, name='MVGN')
+
+
+func = np.vectorize(func, excluded='n')
 
 plt.ylim(0, 0.9)
 
 x = np.asarray(np.linspace(0.01, 5.0, 10000))
-plt.plot(x, func(x))
+plt.plot(x, func(x, n_gt))
+x = np.asarray(np.linspace(0.01, 5.0, 10000))
+# plt.plot(x, pdf(x, 2.0, 1.0))
+
+n, loc, scale = mvgn.fit(r_norm, floc=0)
+
+print(n, loc, scale)
+
+x = np.asarray(np.linspace(0.01, 5.0, 10000))
+
+y = mvgn.pdf(x, n=n, loc=0, scale=scale)
+plt.plot(x, y)
 
 plt.show()
