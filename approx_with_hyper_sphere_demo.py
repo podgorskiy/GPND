@@ -16,17 +16,14 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-import math
 from scipy.stats import multivariate_normal
-import scipy.stats as st
-import scipy.optimize
-import scipy.special
+from normed_mv_gaussiun import *
 
-sigma_gt = 1.0
-n_gt = 3
+sigma_gt = 0.5
+n_gt = 20
 
 mean = np.zeros(n_gt)
-cov = np.eye(n_gt) * sigma_gt
+cov = np.eye(n_gt) * sigma_gt * sigma_gt
 
 samples = np.random.multivariate_normal(mean, cov, 10000)
 
@@ -57,40 +54,16 @@ x = np.stack([x] + [np.zeros(10000)] * (n_gt - 1), axis=1)
 var = multivariate_normal(mean, cov)
 plt.plot(x, var.pdf(x))
 
+func = np.vectorize(log_integral_mvgn, excluded=('n', 'sigma'))
 
-def func(x, n):
-    return math.gamma(n / 2.0) / (2.0 * np.pi ** (n / 2.0) * x ** (n - 1)) * _r_pdf(x)
-
-
-class MVGN(st.rv_continuous):
-    def _pdf(self, x, n):
-        sigma = 1.0
-        return x ** (n - 1) / (2.0 ** (n / 2.0 - 1.0) * sigma * math.gamma(n / 2.0)) * np.exp(
-            - x ** 2 / sigma ** 2 / 2.0)
-
-    def _cdf(self, x, n):
-        s = 1.0
-        return 1.0 - s ** (n - 1) * scipy.special.gammaincc(n / 2.0, x ** 2 / s ** 2 / 2.0) / math.gamma(n / 2.0)
-
-
-mvgn = MVGN(a=0.0, b=np.inf, name='MVGN')
-
-
-func = np.vectorize(func, excluded='n')
-
-plt.ylim(0, 0.9)
+# plt.ylim(0, 0.9)
 
 x = np.asarray(np.linspace(0.01, 5.0, 10000))
-plt.plot(x, func(x, n_gt))
-x = np.asarray(np.linspace(0.01, 5.0, 10000))
-# plt.plot(x, pdf(x, 2.0, 1.0))
 
 n, loc, scale = mvgn.fit(r_norm, floc=0)
+print(n, scale)
 
-print(n, loc, scale)
-
-x = np.asarray(np.linspace(0.01, 5.0, 10000))
-
+plt.plot(x, np.exp(func(x, n, scale)))
 y = mvgn.pdf(x, n=n, loc=0, scale=scale)
 plt.plot(x, y)
 

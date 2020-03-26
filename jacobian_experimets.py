@@ -24,10 +24,10 @@ if __name__ == "__main__":
     J = J2
 
     for i in range(x.shape[0]):
-        u, s, vh = np.linalg.svd(J[i, :, :].T, full_matrices=True)
+        u, s, vh = np.linalg.svd(J[i, :, :], full_matrices=False)
         logD = np.sum(np.log(np.abs(s)))  # | \mathrm{det} S^{-1} |
         print(np.exp(logD))
 
-        J_1 = np.linalg.pinv(J[i, :, :].T)
-        u, s, vh = np.linalg.svd(J_1, full_matrices=True)
+        J_1 = np.linalg.pinv(J[i, :, :])
+        u, s, vh = np.linalg.svd(J_1, full_matrices=False)
         print(np.prod(1.0 / s))
