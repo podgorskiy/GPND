@@ -16,3 +16,7 @@ TRAIN:
   BATCH_SIZE: 128
   EPOCH_COUNT: 80
 
+OUTPUT_FOLDER: 'results'
+RESULTS_NAME: 'results_mnist.csv'
+
+LOSSES: 'classic'

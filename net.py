@@ -114,7 +114,7 @@ class ZDiscriminator_mergebatch(nn.Module):
             normal_init(self._modules[m], mean, std)
 
     def forward(self, x):
-        x = F.leaky_relu((self.linear1(x)), 0.2).view(1, -1) # after the second layer all samples are concatenated
+        x = F.leaky_relu((self.linear1(x)), 0.2).view(1, -1)  # after the second layer all samples are concatenated
         x = F.leaky_relu((self.linear2(x)), 0.2)
         x = torch.sigmoid(self.linear3(x))
         return x

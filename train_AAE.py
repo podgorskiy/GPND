@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import torch.utils.data
-from defaults import get_cfg_defaults
 from torch import optim
 from torchvision.utils import save_image
 from torch.autograd import Variable
@@ -28,16 +27,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def train(folding_id, inliner_classes, ic):
-    cfg = get_cfg_defaults()
-    cfg.merge_from_file('configs/mnist.yaml')
-    cfg.freeze()
+def train(folding_id, inliner_classes, ic, cfg):
     logger = logging.getLogger("logger")
 
     zsize = cfg.MODEL.LATENT_SIZE
     output_folder = os.path.join('results_' + str(folding_id) + "_" + "_".join([str(x) for x in inliner_classes]))
+    output_folder = os.path.join(cfg.OUTPUT_FOLDER, output_folder)
+
     os.makedirs(output_folder, exist_ok=True)
-    os.makedirs('models', exist_ok=True)
+    os.makedirs(os.path.join(cfg.OUTPUT_FOLDER, 'models'), exist_ok=True)
 
     train_set, _, _ = make_datasets(cfg, folding_id, inliner_classes)
 
@@ -141,7 +139,7 @@ def train(folding_id, inliner_classes, ic):
             ZD.zero_grad()
 
             z = torch.randn((x.shape[0], zsize)).view(-1, zsize)
-            z = Variable(z)
+            z = z.requires_grad_(True)
 
             ZD_result = ZD(z).squeeze()
             ZD_real_loss = BCE_loss(ZD_result, y_real_z)
@@ -204,8 +202,8 @@ def train(folding_id, inliner_classes, ic):
     os.makedirs("models", exist_ok=True)
 
     print("Training finish!... save training results")
-    torch.save(G.state_dict(), "models/Gmodel_%d_%d.pkl" %(folding_id, ic))
-    torch.save(E.state_dict(), "models/Emodel_%d_%d.pkl" %(folding_id, ic))
+    torch.save(G.state_dict(), os.path.join(cfg.OUTPUT_FOLDER, "models/Gmodel_%d_%d.pkl" %(folding_id, ic)))
+    torch.save(E.state_dict(), os.path.join(cfg.OUTPUT_FOLDER, "models/Emodel_%d_%d.pkl" %(folding_id, ic)))
     #torch.save(D.state_dict(), "Dmodel_%d_%d.pkl" %(folding_id, ic))
     #torch.save(ZD.state_dict(), "ZDmodel_%d_%d.pkl" %(folding_id, ic))
 
